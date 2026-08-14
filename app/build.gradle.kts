@@ -59,6 +59,10 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(project(":core:core-ink"))
+    androidTestImplementation(libs.androidx.ink.strokes)
+    androidTestImplementation(libs.androidx.ink.brush)
+    androidTestImplementation(libs.androidx.ink.rendering.android)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

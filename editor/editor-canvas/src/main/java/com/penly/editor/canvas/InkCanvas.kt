@@ -32,15 +32,20 @@ fun inkCanvas(
             matrix.postTranslate(state.viewport.offsetX, state.viewport.offsetY)
             state.currentTick
             drawIntoCanvas { canvas ->
+                val nativeCanvas = canvas.nativeCanvas
+                nativeCanvas.save()
+                nativeCanvas.concat(matrix)
                 try {
                     for (record in state.strokes) {
-                        renderer.draw(canvas.nativeCanvas, record.stroke, matrix)
+                        renderer.draw(nativeCanvas, record.stroke, matrix)
                     }
                     state.inProgressStroke?.let { stroke ->
-                        renderer.draw(canvas.nativeCanvas, stroke, matrix)
+                        renderer.draw(nativeCanvas, stroke, matrix)
                     }
                 } catch (exception: RuntimeException) {
                     Log.w(TAG, "stroke rendering failed", exception)
+                } finally {
+                    nativeCanvas.restore()
                 }
             }
         },
