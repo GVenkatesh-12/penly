@@ -73,7 +73,7 @@ class InkCanvasState {
             stroke.enqueueInputs(MutableStrokeInputBatch().add(firstInput), EMPTY_BATCH)
             stroke.updateShape()
         } catch (exception: RuntimeException) {
-            Log.w(TAG, "startStroke rejected input", exception)
+            Log.e(TAG, "startStroke rejected input", exception)
             return
         }
         inProgressStroke = stroke
@@ -90,7 +90,7 @@ class InkCanvasState {
             stroke.enqueueInputs(MutableStrokeInputBatch().add(input), EMPTY_BATCH)
             stroke.updateShape()
         } catch (exception: RuntimeException) {
-            Log.w(TAG, "addInput rejected input", exception)
+            Log.e(TAG, "addInput rejected input", exception)
             return
         }
         bounds.union(input.x, input.y)
@@ -107,7 +107,7 @@ class InkCanvasState {
             history.add(record)
             strokes.add(record)
         } catch (exception: RuntimeException) {
-            Log.w(TAG, "endStroke rejected stroke", exception)
+            Log.e(TAG, "endStroke rejected stroke", exception)
         }
         bumpTick()
     }
