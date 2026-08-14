@@ -1,0 +1,117 @@
+package com.penly.editor.canvas
+
+import android.graphics.RectF
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.ink.brush.InputToolType
+import androidx.ink.strokes.StrokeInput
+import com.penly.core.ink.CanvasViewport
+import com.penly.core.ink.InputSanitizer
+import com.penly.core.ink.PenTool
+import kotlin.math.hypot
+
+internal class InkInputHandler(
+    private val state: InkCanvasState,
+) {
+    private val sanitizer = InputSanitizer()
+    private val bounds = RectF()
+    private var lastPosition = Offset.Zero
+    private var activeTool: PenTool = PenTool.ERASER
+
+    fun onDown(
+        position: Offset,
+        timeMillis: Long,
+        pressure: Float,
+        type: PointerType,
+    ) {
+        sanitizer.reset()
+        lastPosition = position
+        activeTool = state.tool
+        bounds.setEmpty()
+        val page = state.viewport.screenToPage(position)
+        if (activeTool.isStrokeTool) {
+            state.startStroke(activeTool, strokeInput(page, timeMillis, pressure, type), bounds)
+        } else {
+            state.eraseAt(page.x, page.y, eraseRadius())
+        }
+    }
+
+    fun onMove(
+        position: Offset,
+        timeMillis: Long,
+        pressure: Float,
+        type: PointerType,
+    ) {
+        lastPosition = position
+        val page = state.viewport.screenToPage(position)
+        if (activeTool.isStrokeTool) {
+            if (sanitizer.accept(page.x, page.y, timeMillis)) {
+                state.addInput(strokeInput(page, timeMillis, pressure, type), bounds)
+            }
+        } else {
+            state.eraseAt(page.x, page.y, eraseRadius())
+        }
+    }
+
+    fun onUp() {
+        if (activeTool.isStrokeTool) {
+            state.endStroke(bounds)
+        }
+    }
+
+    fun abortStroke() {
+        if (activeTool.isStrokeTool) {
+            state.abortStroke()
+        }
+    }
+
+    private fun strokeInput(
+        page: Offset,
+        timeMillis: Long,
+        pressure: Float,
+        type: PointerType,
+    ): StrokeInput {
+        input.update(
+            x = page.x,
+            y = page.y,
+            elapsedTimeMillis = timeMillis,
+            toolType = type.toInkToolType(),
+            pressure = if (pressure > 0f) pressure else 1f,
+        )
+        return input
+    }
+
+    private fun eraseRadius(): Float = ERASE_RADIUS_PX / state.viewport.scale
+
+    private companion object {
+        val input = StrokeInput()
+        const val ERASE_RADIUS_PX: Float = 16f
+    }
+}
+
+internal fun PointerType.toInkToolType(): InputToolType =
+    when (this) {
+        PointerType.Stylus,
+        PointerType.Eraser,
+        -> InputToolType.STYLUS
+
+        PointerType.Touch -> InputToolType.TOUCH
+        PointerType.Mouse -> InputToolType.MOUSE
+        else -> InputToolType.UNKNOWN
+    }
+
+internal fun CanvasViewport.screenToPage(position: Offset): Offset = Offset(screenToPageX(position.x), screenToPageY(position.y))
+
+internal fun centroidOf(changes: List<PointerInputChange>): Offset =
+    changes.fold(Offset.Zero) { acc, change -> acc + change.position } / changes.size.toFloat()
+
+internal fun spanOf(changes: List<PointerInputChange>): Float {
+    if (changes.size < 2) return 0f
+    val first = changes[0].position
+    val second = changes[1].position
+    return hypot(
+        (second.x - first.x).toDouble(),
+        (second.y - first.y).toDouble(),
+    ).toFloat()
+}

@@ -14,10 +14,10 @@ class PenlyAppSmokeTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun appShowsTitle() {
+    fun appShowsEditor() {
         composeRule.setContent {
             penlyApp()
         }
-        composeRule.onNodeWithText("Penly").assertExists()
+        composeRule.onNodeWithText("Page 1").assertExists()
     }
 }

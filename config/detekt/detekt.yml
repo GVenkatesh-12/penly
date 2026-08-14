@@ -1,0 +1,18 @@
+build:
+  maxIssues: 0
+  weights:
+    complexity: 1
+
+complexity:
+  LongMethod:
+    active: false
+  LongParameterList:
+    active: false
+  TooManyFunctions:
+    active: false
+
+style:
+  MagicNumber:
+    active: false
+  UnusedPrivateMember:
+    active: true

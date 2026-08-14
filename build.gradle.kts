@@ -23,6 +23,11 @@ subprojects {
         apply(plugin = "org.jlleitschuh.gradle.ktlint")
         apply(plugin = "io.gitlab.arturbosch.detekt")
     }
+    plugins.withId("io.gitlab.arturbosch.detekt") {
+        extensions.configure<io.gitlab.arturbosch.detekt.extensions.DetektExtension> {
+            config.setFrom(rootProject.files("config/detekt/detekt.yml"))
+        }
+    }
 }
 
 listOf("ktlintCheck", "detekt", "lintDebug", "testDebugUnitTest", "assembleDebug").forEach { taskName ->
