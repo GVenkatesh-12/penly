@@ -93,7 +93,14 @@ smoke androidTest); core-common `PenlyIds` + unit test; ktlint + detekt
 applied to all modules; aggregate root tasks (`ktlintCheck`, `detekt`,
 `lintDebug`, `testDebugUnitTest`, `assembleDebug`); CI workflows + dependabot
 (commit `8b21d3c`). `./gradlew check` is green locally; the authoritative
-Phase-0 gate is CI on a clean runner.
+Phase-0 gate is CI on a clean runner. CI actions bumped to current majors
+(checkout v7, setup-java v5, setup-gradle v6, upload-artifact v7, gh-release
+v3, github-script v9, commit `90d326f`).
+
+Deferred version bumps (closed dependabot PRs, re-proposed on next weekly
+run): kotlin 2.2.10 → 2.4.10 (needs review vs AGP 9.3.0 embedded KGP) and
+agp 9.3.0 → 9.3.1. core-ktx 1.19.0 stays at 1.18.0 — 1.19.0 requires
+compileSdk 37 and we target 36.
 
 Next: nothing pending for Phase 0 — CI run on `8b21d3c` is the final gate.
 Any failing task — fix, don't silence.
