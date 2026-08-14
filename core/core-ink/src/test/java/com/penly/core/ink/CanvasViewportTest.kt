@@ -52,9 +52,11 @@ class CanvasViewportTest {
     @Test
     fun zoomOut_keepsFocusPointFixed() {
         val viewport = CanvasViewport(scale = 4f, offsetX = 80f, offsetY = 0f)
+        // Before zoom: page point under focus (200,0) is (200-80)/4 = 30
         val zoomed = viewport.zoomAt(200f, 0f, factor = 0.5f)
         assertEquals(2f, zoomed.scale)
-        assertEquals(880f, zoomed.pageToScreenX(200f), 1e-3f)
+        // After zoom: page point 30 should map back to screen x = 200
+        assertEquals(200f, zoomed.pageToScreenX(30f), 1e-3f)
         assertEquals(0f, zoomed.pageToScreenY(0f), 1e-3f)
     }
 }

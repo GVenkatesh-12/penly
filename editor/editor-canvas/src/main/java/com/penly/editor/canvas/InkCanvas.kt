@@ -53,6 +53,7 @@ private fun Modifier.inkInput(state: InkCanvasState): Modifier =
     pointerInput(state) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
+            down.consume()
             val handler = InkInputHandler(state)
             var activePointerId = down.id
             var strokeStarted = false
@@ -60,7 +61,12 @@ private fun Modifier.inkInput(state: InkCanvasState): Modifier =
             var span = 0f
 
             fun startDraw(change: PointerInputChange) {
-                handler.onDown(change.position, change.uptimeMillis, change.pressure, change.type)
+                handler.onDown(
+                    change.position,
+                    change.uptimeMillis,
+                    change.pressure,
+                    change.type,
+                )
                 strokeStarted = true
             }
 
@@ -70,14 +76,23 @@ private fun Modifier.inkInput(state: InkCanvasState): Modifier =
                 val pressed = event.changes.filter { it.pressed }
                 when {
                     pressed.size >= 2 -> {
-                        strokeStarted = false
-                        handler.abortStroke()
+                        if (strokeStarted) {
+                            handler.abortStroke()
+                            strokeStarted = false
+                        }
                         val newCentroid = centroidOf(pressed)
                         val newSpan = spanOf(pressed)
                         if (span > 0f) {
-                            state.zoomAt(newCentroid.x, newCentroid.y, newSpan / span)
+                            state.zoomAt(
+                                newCentroid.x,
+                                newCentroid.y,
+                                newSpan / span,
+                            )
                         }
-                        state.pan(newCentroid.x - centroid.x, newCentroid.y - centroid.y)
+                        state.pan(
+                            newCentroid.x - centroid.x,
+                            newCentroid.y - centroid.y,
+                        )
                         centroid = newCentroid
                         span = newSpan
                         pressed.forEach { it.consume() }
@@ -97,6 +112,7 @@ private fun Modifier.inkInput(state: InkCanvasState): Modifier =
                             centroid = change.position
                             span = 0f
                         }
+                        change.consume()
                     }
                     else -> break
                 }

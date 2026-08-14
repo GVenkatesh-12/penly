@@ -16,8 +16,10 @@ internal class InkInputHandler(
 ) {
     private val sanitizer = InputSanitizer()
     private val bounds = RectF()
+    private val input = StrokeInput()
     private var activeTool: PenTool = PenTool.ERASER
     private var strokeToolType: InputToolType = InputToolType.UNKNOWN
+    private var strokeStartMillis: Long = 0L
 
     fun onDown(
         position: Offset,
@@ -29,10 +31,16 @@ internal class InkInputHandler(
         sanitizer.reset()
         activeTool = state.tool
         strokeToolType = type.toInkToolType()
+        strokeStartMillis = timeMillis
         bounds.setEmpty()
         val page = state.viewport.screenToPage(position)
+        sanitizer.accept(page.x, page.y, 0L)
         if (activeTool.isStrokeTool) {
-            state.startStroke(activeTool, strokeInput(page, timeMillis, pressure), bounds)
+            state.startStroke(
+                activeTool,
+                strokeInput(page, 0L, pressure),
+                bounds,
+            )
         } else {
             state.eraseAt(page.x, page.y, eraseRadius())
         }
@@ -46,9 +54,10 @@ internal class InkInputHandler(
     ) {
         if (position.isInvalid()) return
         val page = state.viewport.screenToPage(position)
+        val elapsed = timeMillis - strokeStartMillis
         if (activeTool.isStrokeTool) {
-            if (sanitizer.accept(page.x, page.y, timeMillis)) {
-                state.addInput(strokeInput(page, timeMillis, pressure), bounds)
+            if (sanitizer.accept(page.x, page.y, elapsed)) {
+                state.addInput(strokeInput(page, elapsed, pressure), bounds)
             }
         } else {
             state.eraseAt(page.x, page.y, eraseRadius())
@@ -69,13 +78,13 @@ internal class InkInputHandler(
 
     private fun strokeInput(
         page: Offset,
-        timeMillis: Long,
+        elapsedMillis: Long,
         pressure: Float,
     ): StrokeInput {
         input.update(
             x = page.x,
             y = page.y,
-            elapsedTimeMillis = timeMillis,
+            elapsedTimeMillis = elapsedMillis,
             toolType = strokeToolType,
             pressure = if (pressure.isFinite() && pressure > 0f) pressure else 1f,
         )
@@ -87,7 +96,6 @@ internal class InkInputHandler(
     private fun Offset.isInvalid(): Boolean = x.isNaN() || y.isNaN()
 
     private companion object {
-        val input = StrokeInput()
         const val ERASE_RADIUS_PX: Float = 16f
     }
 }
@@ -103,10 +111,16 @@ internal fun PointerType.toInkToolType(): InputToolType =
         else -> InputToolType.UNKNOWN
     }
 
-internal fun CanvasViewport.screenToPage(position: Offset): Offset = Offset(screenToPageX(position.x), screenToPageY(position.y))
+internal fun CanvasViewport.screenToPage(position: Offset): Offset =
+    Offset(
+        screenToPageX(position.x),
+        screenToPageY(position.y),
+    )
 
 internal fun centroidOf(changes: List<PointerInputChange>): Offset =
-    changes.fold(Offset.Zero) { acc, change -> acc + change.position } / changes.size.toFloat()
+    changes.fold(Offset.Zero) { acc, change ->
+        acc + change.position
+    } / changes.size.toFloat()
 
 internal fun spanOf(changes: List<PointerInputChange>): Float {
     if (changes.size < 2) return 0f

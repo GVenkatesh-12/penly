@@ -19,8 +19,8 @@ data class CanvasViewport(
         val effectiveFactor = newScale / scale
         return copy(
             scale = newScale,
-            offsetX = offsetX + focusX * scale * (1f - effectiveFactor),
-            offsetY = offsetY + focusY * scale * (1f - effectiveFactor),
+            offsetX = focusX - (focusX - offsetX) * effectiveFactor,
+            offsetY = focusY - (focusY - offsetY) * effectiveFactor,
         )
     }
 
