@@ -1,0 +1,96 @@
+# AGENTS.md
+
+Build process and environment facts for agent sessions working in this repo.
+
+## Project
+
+Penly — an Android handwriting/notebook app (Compose, Room, Ink). CI-first:
+full builds, lint, and tests run on GitHub Actions. The local dev machine only
+runs JDK-only checks (`./gradlew check`); it is too weak for Android Studio.
+
+- `docs/plan.md` is the source of truth for phases and quality gates.
+- Phase 0 exit criterion: `./gradlew check` green on a clean machine (CI).
+- Module graph: `settings.gradle.kts` (app + 13 `core/*` + 4 `feature/*` + 5
+  `editor/*` + 4 `platform/*` + 3 `testing/*` = 29 modules).
+- Version catalog: `gradle/libs.versions.toml` — update versions there.
+
+## Local environment (user machine)
+
+- OS: Ubuntu (Linux), user `gvenkatesh`. NOT a git repo (use git add/commit as usual).
+- System Java is a **JRE only** (`/usr/lib/jvm/java-21-openjdk-amd64`, no javac).
+  Use the JDK at `~/jdk/jdk-21.0.12+8` (Temurin 21). Export before every build:
+  `export JAVA_HOME=~/jdk/jdk-21.0.12+8`
+- No system Gradle. Use the wrapper: `./gradlew` (Gradle 9.7.0).
+- Android SDK at `~/Android/Sdk` (cmdline-tools `latest`, platforms;android-36,
+  build-tools;36.0.0, platform-tools). `local.properties` has `sdk.dir` set and
+  is gitignored. `ANDROID_HOME=~/Android/Sdk`.
+- Constraints: ~3.4 GiB free RAM (daemon `-Xmx2g`, see `gradle.properties`),
+  4 cores, ~8 GB free disk. Use long timeouts for first-run builds (dependency
+  download dominates). Keep SDK/install footprint lean; prefer user-dir
+  installs over sudo (no passwordless sudo available).
+- `org.gradle.configuration-cache=true` and `org.gradle.caching=true` are on.
+
+## Commands
+
+```bash
+export JAVA_HOME=~/jdk/jdk-21.0.12+8
+./gradlew check        # Phase-0 gate: all subproject checks (unit tests, lint, ktlint, detekt)
+./gradlew :app:assembleDebug   # APK
+./gradlew projects     # list modules
+```
+
+First run downloads all dependencies — allow 10–20+ min. Configuration-cache
+serialization warnings are logged but non-fatal unless the build fails.
+
+## Build-system gotchas (learned the hard way)
+
+- **AGP 9.3.0 has built-in Kotlin**: do NOT apply `org.jetbrains.kotlin.android`.
+  Kotlin compiler plugins (compose, serialization) at 2.2.10 via
+  `org.jetbrains.kotlin.plugin.*`; KSP 2.3.11; no `kotlinOptions` block.
+- **`plugins {}` blocks must NOT contain commas** between `alias(...)` lines —
+  script compilation fails.
+- **Gradle 9.7 creates virtual container projects** (`:core`, `:editor`,
+  `:feature`, `:platform`, `:testing`) that have no `check` task. The root
+  `check` in `build.gradle.kts` filters them: `subprojects.filter { it.buildFile.exists() }`.
+- **androidx.datastore:datastore-preferences stable is 1.2.1** (1.3.0 is
+  alpha-only) — verified against maven.google.com. `androidx.test.ext:junit`
+  1.3.0 and `espresso-core` 3.7.0 verified OK.
+- Versions must be verified against maven.google.com metadata before use.
+
+## Version stack (verified Aug 2026)
+
+Gradle 9.7.0 wrapper · AGP 9.3.0 · Kotlin compiler plugins 2.2.10 · KSP 2.3.11 ·
+Compose BOM 2026.06.01 (ui/foundation/runtime 1.11.4, material3 1.4.0) ·
+AndroidX Ink 1.0.0 stable (plan mandates 1.0.0, not 1.1.0-alpha) · Room 2.8.4 ·
+Hilt 2.60.1 · coroutines 1.11.0 · serialization-json 1.11.0 · core-ktx 1.18.0 ·
+lifecycle 2.10.0 · navigation-compose 2.10.0 · work 2.12.0 ·
+datastore-preferences 1.2.1 · activity-compose 1.13.0 · coil3 3.5.0 ·
+androidxTestExt 1.3.0 · espresso 3.7.0 · ktlint plugin 14.2.0 · detekt 1.23.8 ·
+junit 4.13.2 · androidx.test runner/ext via TestExt.
+
+App: package `com.penly.app`, compileSdk 36, minSdk 26, targetSdk 36,
+versionName `0.1.0-alpha.1`.
+
+## Repo conventions
+
+- Apache-2.0, app name "Penly" (committed docs + license already on `main`).
+- Keep lines ≤ 100 chars where ktlint can see them; ktlint + detekt run as part
+  of `check` (plugins configured in root `build.gradle.kts`).
+- CI workflows (`docs/ci/ci-github-actions.md`): `ci.yml`, `nightly.yml`,
+  `release.yml` (signing secrets `PENLY_KEYSTORE_BASE64`, `PENLY_KEYSTORE_PASSWORD`,
+  `PENLY_KEY_ALIAS`, `PENLY_KEY_PASSWORD`) — to be created in
+  `.github/workflows/` (Phase 0 remaining work).
+- Commit style: imperative, concise, matching history (`docs: ...`, `build: ...`).
+  Push to `origin main` after each green step.
+
+## Current state (Phase 0 scaffolding)
+
+Done: docs + license (commit `556420e`); settings.gradle.kts; root
+build.gradle.kts; gradle.properties; .gitignore; gradle wrapper 9.7.0;
+libs.versions.toml; all 29 module build files; SDK + JDK installed locally;
+app module source (MainActivity, PenlyApplication, PenlyApp UI, theme, icons,
+smoke androidTest); core-common `PenlyIds` + unit test.
+
+In progress: write CI workflows + dependabot, commit, push. `./gradlew check` is already green
+write CI workflows + dependabot, commit, push. Any failing task — fix, don't
+silence.
