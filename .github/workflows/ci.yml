@@ -22,7 +22,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Format check
         run: ./gradlew ktlintCheck
       - name: Static analysis
@@ -52,7 +52,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Build debug APK
         run: ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
