@@ -88,9 +88,12 @@ versionName `0.1.0-alpha.1`.
 Done: docs + license (commit `556420e`); settings.gradle.kts; root
 build.gradle.kts; gradle.properties; .gitignore; gradle wrapper 9.7.0;
 libs.versions.toml; all 29 module build files; SDK + JDK installed locally;
-app module source (MainActivity, PenlyApplication, PenlyApp UI, theme, icons,
-smoke androidTest); core-common `PenlyIds` + unit test.
+app module source (MainActivity, PenlyApplication, penlyApp UI, theme, icons,
+smoke androidTest); core-common `PenlyIds` + unit test; ktlint + detekt
+applied to all modules; aggregate root tasks (`ktlintCheck`, `detekt`,
+`lintDebug`, `testDebugUnitTest`, `assembleDebug`); CI workflows + dependabot
+(commit `8b21d3c`). `./gradlew check` is green locally; the authoritative
+Phase-0 gate is CI on a clean runner.
 
-In progress: write CI workflows + dependabot, commit, push. `./gradlew check` is already green
-write CI workflows + dependabot, commit, push. Any failing task — fix, don't
-silence.
+Next: nothing pending for Phase 0 — CI run on `8b21d3c` is the final gate.
+Any failing task — fix, don't silence.
