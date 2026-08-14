@@ -1,6 +1,7 @@
 package com.penly.editor.canvas
 
 import android.graphics.Matrix
+import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -31,16 +32,22 @@ fun inkCanvas(
             matrix.postTranslate(state.viewport.offsetX, state.viewport.offsetY)
             state.currentTick
             drawIntoCanvas { canvas ->
-                for (record in state.strokes) {
-                    renderer.draw(canvas.nativeCanvas, record.stroke, matrix)
-                }
-                state.inProgressStroke?.let { stroke ->
-                    renderer.draw(canvas.nativeCanvas, stroke, matrix)
+                try {
+                    for (record in state.strokes) {
+                        renderer.draw(canvas.nativeCanvas, record.stroke, matrix)
+                    }
+                    state.inProgressStroke?.let { stroke ->
+                        renderer.draw(canvas.nativeCanvas, stroke, matrix)
+                    }
+                } catch (exception: RuntimeException) {
+                    Log.w(TAG, "stroke rendering failed", exception)
                 }
             }
         },
     )
 }
+
+private const val TAG: String = "InkCanvas"
 
 private fun Modifier.inkInput(state: InkCanvasState): Modifier =
     pointerInput(state) {

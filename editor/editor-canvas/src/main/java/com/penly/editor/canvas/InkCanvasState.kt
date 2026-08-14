@@ -1,6 +1,7 @@
 package com.penly.editor.canvas
 
 import android.graphics.RectF
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -67,9 +68,14 @@ class InkCanvasState {
         bounds: RectF,
     ) {
         val stroke = InProgressStroke()
-        stroke.start(BrushFactory.createBrush(tool, tool.defaultSize, tool.defaultColorArgb))
-        stroke.enqueueInputs(MutableStrokeInputBatch().add(firstInput), EMPTY_BATCH)
-        stroke.updateShape()
+        try {
+            stroke.start(BrushFactory.createBrush(tool, tool.defaultSize, tool.defaultColorArgb))
+            stroke.enqueueInputs(MutableStrokeInputBatch().add(firstInput), EMPTY_BATCH)
+            stroke.updateShape()
+        } catch (exception: RuntimeException) {
+            Log.w(TAG, "startStroke rejected input", exception)
+            return
+        }
         inProgressStroke = stroke
         bounds.union(firstInput.x, firstInput.y)
         bumpTick()
@@ -80,20 +86,29 @@ class InkCanvasState {
         bounds: RectF,
     ) {
         val stroke = inProgressStroke ?: return
-        stroke.enqueueInputs(MutableStrokeInputBatch().add(input), EMPTY_BATCH)
-        stroke.updateShape()
+        try {
+            stroke.enqueueInputs(MutableStrokeInputBatch().add(input), EMPTY_BATCH)
+            stroke.updateShape()
+        } catch (exception: RuntimeException) {
+            Log.w(TAG, "addInput rejected input", exception)
+            return
+        }
         bounds.union(input.x, input.y)
         bumpTick()
     }
 
     fun endStroke(bounds: RectF) {
         val stroke = inProgressStroke ?: return
-        stroke.finishInput()
-        stroke.updateShape()
-        val record = StrokeRecord(stroke.toImmutable(), RectF(bounds))
-        history.add(record)
-        strokes.add(record)
         inProgressStroke = null
+        try {
+            stroke.finishInput()
+            stroke.updateShape()
+            val record = StrokeRecord(stroke.toImmutable(), RectF(bounds))
+            history.add(record)
+            strokes.add(record)
+        } catch (exception: RuntimeException) {
+            Log.w(TAG, "endStroke rejected stroke", exception)
+        }
         bumpTick()
     }
 
@@ -144,5 +159,6 @@ class InkCanvasState {
 
     private companion object {
         val EMPTY_BATCH = MutableStrokeInputBatch()
+        const val TAG: String = "InkCanvasState"
     }
 }

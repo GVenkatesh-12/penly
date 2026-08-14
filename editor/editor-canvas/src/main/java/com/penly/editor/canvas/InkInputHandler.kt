@@ -16,8 +16,8 @@ internal class InkInputHandler(
 ) {
     private val sanitizer = InputSanitizer()
     private val bounds = RectF()
-    private var lastPosition = Offset.Zero
     private var activeTool: PenTool = PenTool.ERASER
+    private var strokeToolType: InputToolType = InputToolType.UNKNOWN
 
     fun onDown(
         position: Offset,
@@ -25,13 +25,14 @@ internal class InkInputHandler(
         pressure: Float,
         type: PointerType,
     ) {
+        if (position.isInvalid()) return
         sanitizer.reset()
-        lastPosition = position
         activeTool = state.tool
+        strokeToolType = type.toInkToolType()
         bounds.setEmpty()
         val page = state.viewport.screenToPage(position)
         if (activeTool.isStrokeTool) {
-            state.startStroke(activeTool, strokeInput(page, timeMillis, pressure, type), bounds)
+            state.startStroke(activeTool, strokeInput(page, timeMillis, pressure), bounds)
         } else {
             state.eraseAt(page.x, page.y, eraseRadius())
         }
@@ -43,11 +44,11 @@ internal class InkInputHandler(
         pressure: Float,
         type: PointerType,
     ) {
-        lastPosition = position
+        if (position.isInvalid()) return
         val page = state.viewport.screenToPage(position)
         if (activeTool.isStrokeTool) {
             if (sanitizer.accept(page.x, page.y, timeMillis)) {
-                state.addInput(strokeInput(page, timeMillis, pressure, type), bounds)
+                state.addInput(strokeInput(page, timeMillis, pressure), bounds)
             }
         } else {
             state.eraseAt(page.x, page.y, eraseRadius())
@@ -70,19 +71,20 @@ internal class InkInputHandler(
         page: Offset,
         timeMillis: Long,
         pressure: Float,
-        type: PointerType,
     ): StrokeInput {
         input.update(
             x = page.x,
             y = page.y,
             elapsedTimeMillis = timeMillis,
-            toolType = type.toInkToolType(),
-            pressure = if (pressure > 0f) pressure else 1f,
+            toolType = strokeToolType,
+            pressure = if (pressure.isFinite() && pressure > 0f) pressure else 1f,
         )
         return input
     }
 
     private fun eraseRadius(): Float = ERASE_RADIUS_PX / state.viewport.scale
+
+    private fun Offset.isInvalid(): Boolean = x.isNaN() || y.isNaN()
 
     private companion object {
         val input = StrokeInput()
