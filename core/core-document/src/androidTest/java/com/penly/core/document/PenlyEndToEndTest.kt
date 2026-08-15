@@ -135,17 +135,81 @@ class PenlyEndToEndTest {
     private companion object {
         val PEN_INPUTS =
             arrayOf(
-                StrokeInput().apply { update(10f, 20f, 0L, InputToolType.STYLUS, 0.25f) },
-                StrokeInput().apply { update(30f, 40f, 16L, InputToolType.STYLUS, 0.5f) },
-                StrokeInput().apply { update(60f, 55f, 33L, InputToolType.STYLUS, 0.9f) },
-                StrokeInput().apply { update(90f, 60f, 51L, InputToolType.STYLUS, 0.8f) },
+                StrokeInput().apply {
+                    update(
+                        x = 10f,
+                        y = 20f,
+                        elapsedTimeMillis = 0L,
+                        toolType = InputToolType.STYLUS,
+                        pressure = 0.25f,
+                    )
+                },
+                StrokeInput().apply {
+                    update(
+                        x = 30f,
+                        y = 40f,
+                        elapsedTimeMillis = 16L,
+                        toolType = InputToolType.STYLUS,
+                        pressure = 0.5f,
+                    )
+                },
+                StrokeInput().apply {
+                    update(
+                        x = 60f,
+                        y = 55f,
+                        elapsedTimeMillis = 33L,
+                        toolType = InputToolType.STYLUS,
+                        pressure = 0.9f,
+                    )
+                },
+                StrokeInput().apply {
+                    update(
+                        x = 90f,
+                        y = 60f,
+                        elapsedTimeMillis = 51L,
+                        toolType = InputToolType.STYLUS,
+                        pressure = 0.8f,
+                    )
+                },
             )
         val MARKER_INPUTS =
             arrayOf(
-                StrokeInput().apply { update(5f, 200f, 0L, InputToolType.STYLUS, 1f) },
-                StrokeInput().apply { update(55f, 210f, 12L, InputToolType.STYLUS, 0.9f) },
-                StrokeInput().apply { update(105f, 190f, 24L, InputToolType.STYLUS, 1f) },
-                StrokeInput().apply { update(155f, 170f, 37L, InputToolType.STYLUS, 0.7f) },
+                StrokeInput().apply {
+                    update(
+                        x = 5f,
+                        y = 200f,
+                        elapsedTimeMillis = 0L,
+                        toolType = InputToolType.STYLUS,
+                        pressure = 1f,
+                    )
+                },
+                StrokeInput().apply {
+                    update(
+                        x = 55f,
+                        y = 210f,
+                        elapsedTimeMillis = 12L,
+                        toolType = InputToolType.STYLUS,
+                        pressure = 0.9f,
+                    )
+                },
+                StrokeInput().apply {
+                    update(
+                        x = 105f,
+                        y = 190f,
+                        elapsedTimeMillis = 24L,
+                        toolType = InputToolType.STYLUS,
+                        pressure = 1f,
+                    )
+                },
+                StrokeInput().apply {
+                    update(
+                        x = 155f,
+                        y = 170f,
+                        elapsedTimeMillis = 37L,
+                        toolType = InputToolType.STYLUS,
+                        pressure = 0.7f,
+                    )
+                },
             )
     }
 }

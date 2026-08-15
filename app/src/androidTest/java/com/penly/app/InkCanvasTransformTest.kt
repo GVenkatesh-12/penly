@@ -48,7 +48,15 @@ class InkCanvasTransformTest {
                     enqueueInputs(
                         MutableStrokeInputBatch()
                             .add(
-                                StrokeInput().apply { update(pageX, pageY, 0L, InputToolType.STYLUS, 1f) },
+                                StrokeInput().apply {
+                                    update(
+                                        x = pageX,
+                                        y = pageY,
+                                        elapsedTimeMillis = 0L,
+                                        toolType = InputToolType.STYLUS,
+                                        pressure = 1f,
+                                    )
+                                },
                             ),
                         MutableStrokeInputBatch(),
                     )

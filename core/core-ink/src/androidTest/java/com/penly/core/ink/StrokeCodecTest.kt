@@ -40,9 +40,37 @@ class StrokeCodecTest {
         stroke.start(brush)
         stroke.enqueueInputs(
             MutableStrokeInputBatch()
-                .add(StrokeInput().apply { update(10f, 20f, 0L, InputToolType.STYLUS, 0.25f) })
-                .add(StrokeInput().apply { update(30f, 40f, 16L, InputToolType.STYLUS, 0.5f) })
-                .add(StrokeInput().apply { update(60f, 55f, 33L, InputToolType.STYLUS, 0.9f) }),
+                .add(
+                    StrokeInput().apply {
+                        update(
+                            x = 10f,
+                            y = 20f,
+                            elapsedTimeMillis = 0L,
+                            toolType = InputToolType.STYLUS,
+                            pressure = 0.25f,
+                        )
+                    },
+                ).add(
+                    StrokeInput().apply {
+                        update(
+                            x = 30f,
+                            y = 40f,
+                            elapsedTimeMillis = 16L,
+                            toolType = InputToolType.STYLUS,
+                            pressure = 0.5f,
+                        )
+                    },
+                ).add(
+                    StrokeInput().apply {
+                        update(
+                            x = 60f,
+                            y = 55f,
+                            elapsedTimeMillis = 33L,
+                            toolType = InputToolType.STYLUS,
+                            pressure = 0.9f,
+                        )
+                    },
+                ),
             MutableStrokeInputBatch(),
         )
         stroke.finishInput()

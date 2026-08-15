@@ -287,8 +287,26 @@ class InkCanvasStateTest {
         y2: Float,
     ) {
         val bounds = RectF()
-        val input1 = StrokeInput().apply { update(x1, y1, 0L, InputToolType.STYLUS, 0.5f) }
-        val input2 = StrokeInput().apply { update(x2, y2, 16L, InputToolType.STYLUS, 0.8f) }
+        val input1 =
+            StrokeInput().apply {
+                update(
+                    x = x1,
+                    y = y1,
+                    elapsedTimeMillis = 0L,
+                    toolType = InputToolType.STYLUS,
+                    pressure = 0.5f,
+                )
+            }
+        val input2 =
+            StrokeInput().apply {
+                update(
+                    x = x2,
+                    y = y2,
+                    elapsedTimeMillis = 16L,
+                    toolType = InputToolType.STYLUS,
+                    pressure = 0.8f,
+                )
+            }
         state.startStroke(PenTool.PEN, input1, bounds)
         state.addInput(input2, bounds)
         state.endStroke(bounds)
