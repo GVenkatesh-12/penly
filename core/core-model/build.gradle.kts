@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -13,5 +14,8 @@ android {
 
 dependencies {
     implementation(libs.kotlinx.coroutines.android)
+    implementation(project(":core:core-common"))
+    implementation(project(":core:core-geometry"))
+    implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
 }

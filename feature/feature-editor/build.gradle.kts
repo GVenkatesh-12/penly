@@ -18,6 +18,9 @@ android {
 
 dependencies {
     implementation(project(":editor:editor-canvas"))
+    implementation(project(":core:core-document"))
+    implementation(project(":core:core-common"))
+    implementation(project(":core:core-model"))
     implementation(project(":core:core-ink"))
 
     implementation(platform(libs.androidx.compose.bom))

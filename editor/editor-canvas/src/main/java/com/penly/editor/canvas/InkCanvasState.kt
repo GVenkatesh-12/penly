@@ -31,6 +31,9 @@ class InkCanvasState {
     var inProgressStroke by mutableStateOf<InProgressStroke?>(null)
         private set
 
+    /** Invoked after any page mutation, with a snapshot of all strokes. */
+    var onStrokesChanged: ((List<StrokeRecord>) -> Unit)? = null
+
     private val history = InkHistory<StrokeRecord>()
     private val drawTick = mutableIntStateOf(0)
 
@@ -106,9 +109,17 @@ class InkCanvasState {
             val record = StrokeRecord(stroke.toImmutable(), RectF(bounds))
             history.add(record)
             strokes.add(record)
+            onStrokesChanged?.invoke(strokes.toList())
         } catch (exception: RuntimeException) {
             Log.e(TAG, "endStroke rejected stroke", exception)
         }
+        bumpTick()
+    }
+
+    fun loadRecords(records: List<StrokeRecord>) {
+        strokes.clear()
+        history.clear()
+        strokes.addAll(records)
         bumpTick()
     }
 
@@ -120,12 +131,14 @@ class InkCanvasState {
     fun undo() {
         val record = history.undo() ?: return
         strokes.remove(record)
+        onStrokesChanged?.invoke(strokes.toList())
         bumpTick()
     }
 
     fun redo() {
         val record = history.redo() ?: return
         strokes.add(record)
+        onStrokesChanged?.invoke(strokes.toList())
         bumpTick()
     }
 
@@ -133,6 +146,7 @@ class InkCanvasState {
         strokes.clear()
         history.clear()
         inProgressStroke = null
+        onStrokesChanged?.invoke(strokes.toList())
         bumpTick()
     }
 
@@ -149,6 +163,7 @@ class InkCanvasState {
             }
         if (hit != null) {
             strokes.remove(hit)
+            onStrokesChanged?.invoke(strokes.toList())
             bumpTick()
         }
     }
