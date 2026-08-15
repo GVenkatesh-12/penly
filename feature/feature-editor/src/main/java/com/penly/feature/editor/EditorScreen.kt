@@ -103,23 +103,30 @@ fun editorScreen(
     val currentDocument by rememberUpdatedState(document)
 
     LaunchedEffect(store) {
-        val latestId = store.listDocuments().lastOrNull()
-        if (latestId != null) {
-            when (val result = store.load(latestId)) {
-                is LoadResult.Success -> {
-                    val page = result.document.pages.firstOrNull()
-                    if (page != null) {
-                        val records =
-                            page.objects.mapNotNull { obj ->
-                                if (obj is InkObject) InkObjectMapper.toStrokeRecord(obj) else null
-                            }
-                        state.loadRecords(records)
-                        document = result.document
+        val loaded =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val latestId = store.listDocuments().lastOrNull() ?: return@withContext null
+                    when (val result = store.load(latestId)) {
+                        is LoadResult.Success -> result.document
+                        is LoadResult.Failure -> {
+                            Log.w(TAG, "failed to load document $latestId: ${result.reason}")
+                            null
+                        }
                     }
+                }.getOrElse { error ->
+                    Log.w(TAG, "failed to load latest document", error)
+                    null
                 }
-                is LoadResult.Failure ->
-                    Log.w(TAG, "failed to load document $latestId: ${result.reason}")
             }
+        val page = loaded?.pages?.firstOrNull()
+        if (page != null) {
+            val records =
+                page.objects.mapNotNull { obj ->
+                    if (obj is InkObject) InkObjectMapper.toStrokeRecord(obj) else null
+                }
+            state.loadRecords(records)
+            document = loaded
         }
     }
 
@@ -127,9 +134,21 @@ fun editorScreen(
         state.onStrokesChanged = { records ->
             scope.launch {
                 saveMutex.withLock {
-                    val saved = buildDocument(currentDocument, records)
-                    withContext(Dispatchers.IO) { store.save(saved) }
-                    document = saved
+                    val current = currentDocument
+                    val saved =
+                        withContext(Dispatchers.IO) {
+                            runCatching {
+                                val updated = buildDocument(current, records)
+                                store.save(updated)
+                                updated
+                            }.getOrElse { error ->
+                                Log.w(TAG, "failed to save page", error)
+                                null
+                            }
+                        }
+                    if (saved != null) {
+                        document = saved
+                    }
                 }
             }
         }

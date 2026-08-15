@@ -1,6 +1,7 @@
 package com.penly.core.document
 
 import android.graphics.RectF
+import android.util.Log
 import androidx.ink.brush.StockBrushes
 import com.penly.core.common.PenlyIds
 import com.penly.core.geometry.Rect
@@ -55,14 +56,22 @@ object InkObjectMapper {
     }
 
     /**
-     * Rebuilds a [StrokeRecord] from [inkObject]; returns null when the payload is missing.
+     * Rebuilds a [StrokeRecord] from [inkObject]; returns null when the payload is missing or
+     * cannot be decoded (e.g. written by an older codec version). Undecodable objects are
+     * skipped with a warning instead of failing the page load.
      * The record bounds are recomputed as the min/max of the decoded stroke's inputs.
      */
     fun toStrokeRecord(inkObject: InkObject): StrokeRecord? {
         val payload = inkObject.payload ?: return null
-        val tool = PenTool.valueOf(inkObject.brushId)
-        val brush = BrushFactory.createBrush(tool, inkObject.size, inkObject.colorArgb)
-        val stroke = StrokeCodec.decode(payload, brush)
+        val stroke =
+            try {
+                val tool = PenTool.valueOf(inkObject.brushId)
+                val brush = BrushFactory.createBrush(tool, inkObject.size, inkObject.colorArgb)
+                StrokeCodec.decode(payload, brush)
+            } catch (exception: RuntimeException) {
+                Log.w(TAG, "skipping undecodable ink object ${inkObject.objectId}", exception)
+                return null
+            }
         val inputs = stroke.inputs
         if (inputs.size == 0) return StrokeRecord(stroke, RectF())
         var minX = inputs.get(0).x
@@ -78,4 +87,6 @@ object InkObjectMapper {
         }
         return StrokeRecord(stroke, RectF(minX, minY, maxX, maxY))
     }
+
+    private const val TAG: String = "InkObjectMapper"
 }
