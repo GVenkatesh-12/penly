@@ -47,7 +47,7 @@ class DocumentIndexTest {
     @Test
     fun storeWritesDocumentIndex_toDocumentJson() {
         val store = InMemoryContentStore()
-        val forge = PaperForgeStore(store)
+        val penlyStore = PenlyStore(store)
         val documentId = DocumentId("doc-index")
         val document =
             Document(
@@ -80,7 +80,7 @@ class DocumentIndexTest {
                     ),
             )
 
-        forge.save(document)
+        penlyStore.save(document)
 
         val bytes =
             store.open("${documentId.value}/document.json")

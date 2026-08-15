@@ -460,13 +460,13 @@ Introduce a versioned native package format immediately.
 Suggested extension:
 
 ```text
-.paperforge
+.penly
 ```
 
 Example:
 
 ```text
-note.paperforge/
+note.penly/
 ├── manifest.json
 ├── document.json
 ├── pages/
@@ -488,7 +488,7 @@ Example conceptual fields:
 
 ```json
 {
-  "format": "paperforge",
+  "format": "penly",
   "formatVersion": 1,
   "minimumReaderVersion": 1,
   "documentId": "...",
@@ -1893,7 +1893,7 @@ No serious allocations or blocking storage work occur in the active stroke loop.
 - transforms
 - revision numbers
 - serialization
-- native `.paperforge` logical format
+- native `.penly` logical format
 - file store
 - Room metadata
 

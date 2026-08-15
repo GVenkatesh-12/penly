@@ -39,6 +39,18 @@ data class Transform(
     }
 
     /**
+     * Returns this transform composed with a pure translation by ([dx], [dy]).
+     *
+     * Translation is applied after rotation/scale (`T(d) * this`), which is exactly an additive
+     * shift of [translationX]/[translationY] for any scale or rotation — objects move without
+     * distortion.
+     */
+    fun translate(
+        dx: Float,
+        dy: Float,
+    ): Transform = copy(translationX = translationX + dx, translationY = translationY + dy)
+
+    /**
      * Returns the transform that undoes this one: `scale' = (1/scaleX, 1/scaleY)`,
      * `rotation' = -rotationDegrees`, `translation' = -R(-theta) * S^-1 * t`.
      */

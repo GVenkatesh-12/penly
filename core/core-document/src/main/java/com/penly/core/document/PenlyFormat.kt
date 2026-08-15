@@ -27,11 +27,11 @@ import java.io.IOException
 import java.io.InputStream
 
 /**
- * Binary page-file container for PaperForge.
+ * Binary page-file container for Penly.
  *
  * Layout (all integers big-endian):
  * ```
- * magic "PFPG" (4 bytes) | version 0x01 | record count (4 bytes)
+ * magic "PNLY" (4 bytes) | version 0x01 | record count (4 bytes)
  * per object record:
  *   type byte   0x01=ink 0x02=text 0x03=image 0x04=shape 0x05=embedded 0x06=opaque
  *   objectId    2-byte BE length + UTF-8 bytes
@@ -41,14 +41,14 @@ import java.io.InputStream
  * Unknown record type bytes and unknown JSON class discriminators decode as [OpaqueObject]s
  * carrying the raw payload, so forward-compatible records survive re-saves losslessly.
  */
-internal object PaperForgeFormat {
-    /** Four ASCII bytes "PFPG". */
-    val MAGIC: ByteArray = byteArrayOf(0x50, 0x46, 0x50, 0x47)
+internal object PenlyFormat {
+    /** Four ASCII bytes "PNLY". */
+    val MAGIC: ByteArray = byteArrayOf(0x50, 0x4E, 0x4C, 0x59)
 
     /** Current page-file format version byte. */
     const val VERSION: Byte = 0x01
 
-    /** Current PaperForge format version (also stamped in the manifest). */
+    /** Current Penly format version (also stamped in the manifest). */
     const val FORMAT_VERSION: Int = 1
 
     private const val TYPE_INK: Int = 0x01
@@ -108,7 +108,7 @@ internal object PaperForgeFormat {
             val magic = ByteArray(MAGIC.size)
             readFully(input, magic)
             if (!magic.contentEquals(MAGIC)) {
-                throw IllegalArgumentException("bad magic: expected PFPG")
+                throw IllegalArgumentException("bad magic: expected PNLY")
             }
             val version = input.read()
             if (version < 0) throw IOException("truncated")

@@ -9,6 +9,7 @@ import androidx.ink.strokes.Stroke
 import androidx.ink.strokes.StrokeInput
 import androidx.ink.strokes.StrokeInputBatch
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.penly.core.geometry.Transform
 import com.penly.core.ink.BrushFactory
 import com.penly.core.ink.PenTool
 import com.penly.core.ink.StrokeRecord
@@ -32,8 +33,7 @@ class InkObjectMapperTest {
 
         val obj =
             InkObjectMapper.toInkObject(
-                record = StrokeRecord(stroke, expectedBounds),
-                objectId = ObjectId("stroke-1"),
+                record = StrokeRecord(ObjectId("stroke-1"), stroke, expectedBounds),
                 nowMillis = 1234L,
             )
 
@@ -67,7 +67,7 @@ class InkObjectMapperTest {
         val highlighterStroke = buildStroke(highlighterBrush)
         val highlighterObj =
             InkObjectMapper.toInkObject(
-                record = StrokeRecord(highlighterStroke, boundsOf(highlighterStroke)),
+                record = StrokeRecord(ObjectId("highlighter-1"), highlighterStroke, boundsOf(highlighterStroke)),
                 nowMillis = 0L,
             )
         assertEquals("HIGHLIGHTER", highlighterObj.brushId)
@@ -76,7 +76,7 @@ class InkObjectMapperTest {
         val penStroke = buildStroke(penBrush)
         val penObj =
             InkObjectMapper.toInkObject(
-                record = StrokeRecord(penStroke, boundsOf(penStroke)),
+                record = StrokeRecord(ObjectId("pen-1"), penStroke, boundsOf(penStroke)),
                 nowMillis = 0L,
             )
         assertEquals("PEN", penObj.brushId)
@@ -88,8 +88,7 @@ class InkObjectMapperTest {
         val pencilStroke = buildStroke(pencilBrush)
         val obj =
             InkObjectMapper.toInkObject(
-                record = StrokeRecord(pencilStroke, boundsOf(pencilStroke)),
-                objectId = ObjectId("pencil-1"),
+                record = StrokeRecord(ObjectId("pencil-1"), pencilStroke, boundsOf(pencilStroke)),
                 nowMillis = 0L,
             )
         // Pencil shares the pressurePen family, so it cannot be distinguished from a pen.
@@ -107,6 +106,44 @@ class InkObjectMapperTest {
                 opacity = 1f,
             )
         assertNull(InkObjectMapper.toStrokeRecord(obj))
+    }
+
+    @Test
+    fun transformRoundTrip_preservesObjectIdAndTranslation() {
+        val brush = BrushFactory.createBrush(PenTool.PEN, 5f, 0xFF1B2A4A.toInt())
+        val stroke = buildStroke(brush)
+        val base = boundsOf(stroke)
+        val moved =
+            RectF(
+                base.left + 50f,
+                base.top + 25f,
+                base.right + 50f,
+                base.bottom + 25f,
+            )
+        val record =
+            StrokeRecord(
+                objectId = ObjectId("moved-1"),
+                stroke = stroke,
+                bounds = moved,
+                transform = Transform(translationX = 50f, translationY = 25f),
+            )
+
+        val obj = InkObjectMapper.toInkObject(record = record, nowMillis = 0L)
+        assertEquals("moved-1", obj.objectId.value)
+        assertEquals(50f, obj.transform.translationX, 0f)
+        assertEquals(25f, obj.transform.translationY, 0f)
+
+        val restored = InkObjectMapper.toStrokeRecord(obj)
+        assertNotNull(restored)
+        assertEquals("moved-1", restored!!.objectId.value)
+        assertEquals(50f, restored.transform.translationX, 0f)
+        assertEquals(25f, restored.transform.translationY, 0f)
+        // Effective bounds survive the round trip: base input bounds + stored translation.
+        assertEquals(moved.left, restored.bounds.left, 0.001f)
+        assertEquals(moved.top, restored.bounds.top, 0.001f)
+        assertEquals(moved.right, restored.bounds.right, 0.001f)
+        assertEquals(moved.bottom, restored.bounds.bottom, 0.001f)
+        assertBatchesEqual(stroke.inputs, restored.stroke.inputs)
     }
 
     private fun buildStroke(brush: Brush): Stroke {

@@ -29,12 +29,12 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The Phase 2 exit-criterion proof: two real strokes are saved through [PaperForgeStore],
+ * The Phase 2 exit-criterion proof: two real strokes are saved through [PenlyStore],
  * the in-memory objects are discarded, and reloading yields strokes with identical inputs —
  * same data means the same rendering, hence no visual drift.
  */
 @RunWith(AndroidJUnit4::class)
-class PaperForgeEndToEndTest {
+class PenlyEndToEndTest {
     @Test
     fun saveDiscardLoad_restoresIdenticalStrokeInputs() {
         val penBrush = BrushFactory.createBrush(PenTool.PEN, 5f, PenTool.PEN.defaultColorArgb)
@@ -53,8 +53,7 @@ class PaperForgeEndToEndTest {
                 objects =
                     originalStrokes.map { stroke ->
                         InkObjectMapper.toInkObject(
-                            record = StrokeRecord(stroke, boundsOf(stroke)),
-                            objectId = ObjectId(PenlyIds.newId()),
+                            record = StrokeRecord(ObjectId(PenlyIds.newId()), stroke, boundsOf(stroke)),
                             nowMillis = now,
                         )
                     },
@@ -65,11 +64,11 @@ class PaperForgeEndToEndTest {
         val original = Document(documentId, "End to End", listOf(page), 1, now, now)
 
         val store = InMemoryContentStore()
-        val forge = PaperForgeStore(store)
-        forge.save(original)
+        val penlyStore = PenlyStore(store)
+        penlyStore.save(original)
 
         // Discard the in-memory objects: everything below comes back from the store.
-        val result = forge.load(documentId)
+        val result = penlyStore.load(documentId)
         assertTrue("expected Success, got $result", result is LoadResult.Success)
         val loaded = (result as LoadResult.Success).document
 

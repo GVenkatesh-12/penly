@@ -12,6 +12,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:core-geometry"))
 
     testImplementation(libs.junit)
 }

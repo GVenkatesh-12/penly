@@ -11,29 +11,29 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class PaperForgeStoreMultiDocumentTest {
+class PenlyStoreMultiDocumentTest {
     private val store = InMemoryContentStore()
-    private val forge = PaperForgeStore(store)
+    private val penlyStore = PenlyStore(store)
 
     @Test
     fun listDocuments_returnsAllSavedDocuments() {
         val docA = singleInkPage("doc-a", "Doc A", "ink-a")
         val docB = singleInkPage("doc-b", "Doc B", "ink-b")
 
-        forge.save(docA)
-        forge.save(docB)
+        penlyStore.save(docA)
+        penlyStore.save(docB)
 
-        val ids = forge.listDocuments()
+        val ids = penlyStore.listDocuments()
         assertEquals(setOf(DocumentId("doc-a"), DocumentId("doc-b")), ids.toSet())
         assertEquals(2, ids.size)
     }
 
     @Test
     fun loadingOneDocument_doesNotSeeTheOthersPages() {
-        forge.save(singleInkPage("doc-a", "Doc A", "ink-a"))
-        forge.save(singleInkPage("doc-b", "Doc B", "ink-b"))
+        penlyStore.save(singleInkPage("doc-a", "Doc A", "ink-a"))
+        penlyStore.save(singleInkPage("doc-b", "Doc B", "ink-b"))
 
-        val result = forge.load(DocumentId("doc-a"))
+        val result = penlyStore.load(DocumentId("doc-a"))
         assertTrue("expected Success, got $result", result is LoadResult.Success)
         val loaded = (result as LoadResult.Success).document
 
@@ -50,7 +50,7 @@ class PaperForgeStoreMultiDocumentTest {
 
     @Test
     fun listDocuments_isEmpty_forEmptyStore() {
-        assertTrue(forge.listDocuments().isEmpty())
+        assertTrue(penlyStore.listDocuments().isEmpty())
     }
 
     private fun singleInkPage(

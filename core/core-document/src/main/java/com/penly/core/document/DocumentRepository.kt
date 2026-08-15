@@ -14,11 +14,11 @@ import com.penly.core.model.PageId
 
 /**
  * Application-facing document service: creates documents, persists them through
- * [PaperForgeStore], and mirrors the document graph into Room metadata (documents, pages,
+ * [PenlyStore], and mirrors the document graph into Room metadata (documents, pages,
  * and per-object spatial index rows) for querying.
  */
 class DocumentRepository(
-    private val paperForge: PaperForgeStore,
+    private val penlyStore: PenlyStore,
     private val documentDao: DocumentDao,
     private val pageDao: PageDao,
     private val objectDao: ObjectDao,
@@ -68,14 +68,14 @@ class DocumentRepository(
                 revision = document.revision + 1,
                 updatedAtMillis = now,
             )
-        paperForge.save(saved)
+        penlyStore.save(saved)
         upsertMetadata(saved)
         return saved
     }
 
     /** Loads [documentId] and refreshes Room metadata from the loaded document on success. */
     fun loadDocument(documentId: DocumentId): LoadResult {
-        val result = paperForge.load(documentId)
+        val result = penlyStore.load(documentId)
         if (result is LoadResult.Success) {
             upsertMetadata(result.document)
         }

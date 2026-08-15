@@ -16,6 +16,8 @@ import com.penly.core.ink.PenTool
 fun brushBar(
     tool: PenTool,
     onToolSelected: (PenTool) -> Unit,
+    selectionMode: Boolean = false,
+    onSelectionModeChange: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -30,8 +32,14 @@ fun brushBar(
             FilterChip(
                 selected = tool == entry,
                 onClick = { onToolSelected(entry) },
+                enabled = !selectionMode,
                 label = { Text(entry.label) },
             )
         }
+        FilterChip(
+            selected = selectionMode,
+            onClick = { onSelectionModeChange(!selectionMode) },
+            label = { Text("Select") },
+        )
     }
 }

@@ -21,9 +21,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 
-class PaperForgeStoreTest {
+class PenlyStoreTest {
     private val store = InMemoryContentStore()
-    private val forge = PaperForgeStore(store)
+    private val penlyStore = PenlyStore(store)
 
     @Test
     fun roundTrip_preservesObjectsIncludingPayloadBytes() {
@@ -108,8 +108,8 @@ class PaperForgeStoreTest {
                 updatedAtMillis = 999L,
             )
 
-        forge.save(document)
-        val result = forge.load(DocumentId("doc-1"))
+        penlyStore.save(document)
+        val result = penlyStore.load(DocumentId("doc-1"))
 
         assertTrue("expected Success, got $result", result is LoadResult.Success)
         val success = result as LoadResult.Success
@@ -154,7 +154,7 @@ class PaperForgeStoreTest {
     @Test
     fun checksumMismatch_returnsFailure() {
         val document = singleInkPageDocument()
-        forge.save(document)
+        penlyStore.save(document)
 
         val pageId =
             document.pages
@@ -163,14 +163,14 @@ class PaperForgeStoreTest {
         val pagePath = "${document.documentId.value}/pages/page-$pageId.bin"
         store.put(pagePath, byteArrayOf(0x00, 0x01, 0x02, 0x03))
 
-        val result = forge.load(document.documentId)
+        val result = penlyStore.load(document.documentId)
         assertTrue("expected Failure, got $result", result is LoadResult.Failure)
         assertTrue((result as LoadResult.Failure).reason.contains("checksum mismatch"))
     }
 
     @Test
     fun missingManifest_returnsFailure() {
-        val result = forge.load(DocumentId("does-not-exist"))
+        val result = penlyStore.load(DocumentId("does-not-exist"))
         assertTrue("expected Failure, got $result", result is LoadResult.Failure)
     }
 
@@ -217,7 +217,7 @@ class PaperForgeStoreTest {
             Json.encodeToString(Manifest.serializer(), manifest).toByteArray(Charsets.UTF_8),
         )
 
-        val result = forge.load(documentId)
+        val result = penlyStore.load(documentId)
         assertTrue("expected Success, got $result", result is LoadResult.Success)
         val success = result as LoadResult.Success
         assertFalse("expected an opaque fallback warning", success.warnings.isEmpty())
@@ -231,8 +231,8 @@ class PaperForgeStoreTest {
         assertTrue(opaque.payload!!.contentEquals(payload))
 
         // Re-saving keeps the opaque data lossless.
-        forge.save(success.document)
-        val reloaded = forge.load(documentId) as LoadResult.Success
+        penlyStore.save(success.document)
+        val reloaded = penlyStore.load(documentId) as LoadResult.Success
         val opaqueAgain =
             reloaded.document.pages
                 .single()
@@ -275,8 +275,8 @@ class PaperForgeStoreTest {
         payload: ByteArray,
     ): ByteArray {
         val out = ByteArrayOutputStream()
-        out.write(PaperForgeFormat.MAGIC)
-        out.write(PaperForgeFormat.VERSION.toInt())
+        out.write(PenlyFormat.MAGIC)
+        out.write(PenlyFormat.VERSION.toInt())
         writeInt(out, 1)
         out.write(0x00)
         val idBytes = "widget-1".toByteArray(Charsets.UTF_8)

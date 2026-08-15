@@ -10,7 +10,7 @@ import kotlinx.serialization.Transient
  * Polymorphic root of all objects placed on a page. Common metadata is declared here and
  * repeated as constructor parameters on every subclass; subclasses carry a derived [type]
  * property (transient — the JSON discriminator is the @SerialName) and the binary [payload]
- * is [Transient] — the paperforge page file carries it out-of-band.
+ * is [Transient] — the penly page file carries it out-of-band.
  */
 @Serializable
 sealed class PageObject {
@@ -26,6 +26,34 @@ sealed class PageObject {
 
     abstract val type: PageObjectType
     abstract val payload: ByteArray?
+
+    /**
+     * Returns a copy of this object with [objectId] replaced and all other fields unchanged.
+     * (The base class has no `copy` — it is generated per data subclass.)
+     */
+    fun withObjectId(objectId: ObjectId): PageObject =
+        when (this) {
+            is InkObject -> copy(objectId = objectId)
+            is TextObject -> copy(objectId = objectId)
+            is ImageObject -> copy(objectId = objectId)
+            is ShapeObject -> copy(objectId = objectId)
+            is EmbeddedObject -> copy(objectId = objectId)
+            is OpaqueObject -> copy(objectId = objectId)
+        }
+
+    /** Returns a copy with [transform] and [bounds] replaced (all other fields unchanged). */
+    fun withTransform(
+        transform: Transform,
+        bounds: Rect,
+    ): PageObject =
+        when (this) {
+            is InkObject -> copy(transform = transform, bounds = bounds)
+            is TextObject -> copy(transform = transform, bounds = bounds)
+            is ImageObject -> copy(transform = transform, bounds = bounds)
+            is ShapeObject -> copy(transform = transform, bounds = bounds)
+            is EmbeddedObject -> copy(transform = transform, bounds = bounds)
+            is OpaqueObject -> copy(transform = transform, bounds = bounds)
+        }
 }
 
 @Serializable

@@ -11,14 +11,14 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 /**
- * Persists [Document]s in a [ContentStore] using the PaperForge format.
+ * Persists [Document]s in a [ContentStore] using the Penly format.
  *
  * Each document lives in a top-level directory `<documentId>/`:
  * - `pages/page-<pageId>.bin` — binary page file (page metadata + objects with payloads)
  * - `document.json` — [DocumentIndex] (document metadata + page refs, no objects)
  * - `manifest.json` — [Manifest] with per-file sha256 checksums, written last as the commit marker
  */
-class PaperForgeStore(
+class PenlyStore(
     private val store: ContentStore,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -30,7 +30,7 @@ class PaperForgeStore(
         val files = LinkedHashMap<String, String>()
         for (page in document.pages) {
             val path = pageFilePath(documentId, page.pageId)
-            store.put(path, PaperForgeFormat.encodePage(page, json))
+            store.put(path, PenlyFormat.encodePage(page, json))
             files[path] = store.checksum(path)
         }
         val indexPath = indexPath(documentId)
@@ -70,10 +70,10 @@ class PaperForgeStore(
         if (manifest.format != FORMAT_NAME) {
             return failure("unsupported format '${manifest.format}'")
         }
-        if (manifest.formatVersion != PaperForgeFormat.FORMAT_VERSION) {
+        if (manifest.formatVersion != PenlyFormat.FORMAT_VERSION) {
             return failure("unsupported format version ${manifest.formatVersion}")
         }
-        if (manifest.minimumReaderVersion > PaperForgeFormat.FORMAT_VERSION) {
+        if (manifest.minimumReaderVersion > PenlyFormat.FORMAT_VERSION) {
             return failure("requires reader version ${manifest.minimumReaderVersion}")
         }
         for ((path, expected) in manifest.files) {
@@ -108,7 +108,7 @@ class PaperForgeStore(
                 }
                 val decoded =
                     try {
-                        PaperForgeFormat.decodePage(bytes, json)
+                        PenlyFormat.decodePage(bytes, json)
                     } catch (e: Exception) {
                         return failure("corrupt page file '$path': ${e.message}")
                     }
@@ -146,6 +146,28 @@ class PaperForgeStore(
             }.sortedBy { it.value }
     }
 
+    /**
+     * Writes an imported asset (e.g. an image) at `<documentId>/assets/<name>` and returns the
+     * relative reference stored on an [com.penly.core.model.ImageObject]'s payloadRef
+     * ("assets/<name>"). Assets are written by the editor at insert time and are NOT listed in
+     * the manifest (integrity checks for assets land in Phase 4).
+     */
+    fun putAsset(
+        documentId: DocumentId,
+        name: String,
+        bytes: ByteArray,
+    ): String {
+        val path = "${documentId.value}/assets/$name"
+        store.put(path, bytes)
+        return "assets/$name"
+    }
+
+    /** Returns the bytes of an asset referenced by [payloadRef] ("assets/<name>"), or null. */
+    fun openAsset(
+        documentId: DocumentId,
+        payloadRef: String,
+    ): ByteArray? = store.open("${documentId.value}/$payloadRef")
+
     private fun manifestPath(documentId: DocumentId): String = "${documentId.value}/manifest.json"
 
     private fun indexPath(documentId: DocumentId): String = "${documentId.value}/document.json"
@@ -156,6 +178,6 @@ class PaperForgeStore(
     ): String = "${documentId.value}/pages/page-${pageId.value}.bin"
 
     private companion object {
-        const val FORMAT_NAME: String = "paperforge"
+        const val FORMAT_NAME: String = "penly"
     }
 }

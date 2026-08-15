@@ -12,6 +12,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:core-model"))
+    implementation(project(":core:core-geometry"))
     implementation(libs.androidx.ink.strokes)
     implementation(libs.androidx.ink.brush)
     implementation(libs.androidx.ink.geometry)

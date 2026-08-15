@@ -18,6 +18,11 @@ android {
 
 dependencies {
     implementation(project(":core:core-ink"))
+    implementation(project(":core:core-model"))
+    implementation(project(":core:core-geometry"))
+    implementation(project(":core:core-common"))
+    implementation(project(":editor:editor-history"))
+    implementation(project(":editor:editor-selection"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
