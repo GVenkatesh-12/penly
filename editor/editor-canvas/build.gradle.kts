@@ -34,4 +34,6 @@ dependencies {
     implementation(libs.androidx.ink.rendering.android)
 
     testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
 }

@@ -341,14 +341,15 @@ class InkCanvasState {
         val clonedObjects =
             objects
                 .filter { it.objectId in ids }
-                .map { obj -> obj.withObjectId(ObjectId(PenlyIds.newId())) }
-        if (clonedStrokes.isNotEmpty()) {
-            val command = InsertStrokes(clonedStrokes)
-            commands.push(command)
-            command.redo(this)
-        }
-        if (clonedObjects.isNotEmpty()) {
-            val command = InsertObjects(clonedObjects)
+                .map { obj ->
+                    val newId = ObjectId(PenlyIds.newId())
+                    if (obj is ImageObject) {
+                        images[obj.objectId]?.let { images[newId] = it }
+                    }
+                    obj.withObjectId(newId)
+                }
+        if (clonedStrokes.isNotEmpty() || clonedObjects.isNotEmpty()) {
+            val command = InsertItems(clonedStrokes, clonedObjects)
             commands.push(command)
             command.redo(this)
         }
@@ -419,7 +420,8 @@ class InkCanvasState {
             var pointInside = false
             for (index in 0 until record.stroke.inputs.size) {
                 val input = record.stroke.inputs.get(index)
-                if (path.contains(Point(input.x, input.y))) {
+                val pt = record.transform.apply(Point(input.x, input.y))
+                if (path.contains(pt)) {
                     pointInside = true
                     break
                 }
@@ -622,12 +624,19 @@ class InkCanvasState {
         }
     }
 
-    private class InsertStrokes(
+    private class InsertItems(
         val records: List<StrokeRecord>,
+        val inserted: List<PageObject>,
     ) : EditorCommand {
-        override fun undo(state: InkCanvasState) = state.removeStrokesInternal(records.map { it.objectId })
+        override fun undo(state: InkCanvasState) {
+            state.removeStrokesInternal(records.map { it.objectId })
+            state.removeObjectsInternal(inserted.map { it.objectId })
+        }
 
-        override fun redo(state: InkCanvasState) = state.addStrokesInternal(records)
+        override fun redo(state: InkCanvasState) {
+            state.addStrokesInternal(records)
+            state.addObjectsInternal(inserted)
+        }
     }
 
     private class InsertObjects(

@@ -55,13 +55,24 @@ fun inkCanvas(
                     // Finished ink (per-object transform composed with the viewport) and the
                     // in-progress stroke stay together: lowest-latency active stroke rendering.
                     for (record in state.strokes) {
-                        val strokeMatrix =
-                            if (record.transform == Transform.IDENTITY) {
-                                matrix
-                            } else {
-                                composeTransform(matrix, record.transform)
-                            }
-                        renderer.draw(nativeCanvas, record.stroke, strokeMatrix)
+                        if (record.transform == Transform.IDENTITY) {
+                            renderer.draw(nativeCanvas, record.stroke, matrix)
+                        } else {
+                            val strokeMatrix = composeTransform(matrix, record.transform)
+                            val objMatrix =
+                                Matrix().apply {
+                                    setScale(record.transform.scaleX, record.transform.scaleY)
+                                    postRotate(record.transform.rotationDegrees)
+                                    postTranslate(
+                                        record.transform.translationX,
+                                        record.transform.translationY,
+                                    )
+                                }
+                            nativeCanvas.save()
+                            nativeCanvas.concat(objMatrix)
+                            renderer.draw(nativeCanvas, record.stroke, strokeMatrix)
+                            nativeCanvas.restore()
+                        }
                     }
                     state.inProgressStroke?.let { stroke ->
                         renderer.draw(nativeCanvas, stroke, matrix)
@@ -84,16 +95,20 @@ fun inkCanvas(
 
 private const val TAG: String = "InkCanvas"
 
-/** Viewport matrix composed with an object transform: `viewport * T * R * S`. */
+/** Viewport matrix composed with an object transform: `viewport * (T * R * S)`. */
 private fun composeTransform(
     viewportMatrix: Matrix,
     transform: Transform,
 ): Matrix {
-    val matrix = Matrix(viewportMatrix)
-    matrix.postScale(transform.scaleX, transform.scaleY)
-    matrix.postRotate(transform.rotationDegrees)
-    matrix.postTranslate(transform.translationX, transform.translationY)
-    return matrix
+    val objMatrix =
+        Matrix().apply {
+            setScale(transform.scaleX, transform.scaleY)
+            postRotate(transform.rotationDegrees)
+            postTranslate(transform.translationX, transform.translationY)
+        }
+    return Matrix(viewportMatrix).apply {
+        preConcat(objMatrix)
+    }
 }
 
 private fun drawObject(
@@ -272,7 +287,7 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
     val activePointerId = down.id
     val downPage = state.viewport.screenToPage(down.position)
     val mode =
-        if (state.hitTestSelection(downPage.x, downPage.y)) {
+        if (state.hitTestSelection(down.position.x, down.position.y)) {
             SelectionGesture.MOVE
         } else {
             SelectionGesture.LASSO
