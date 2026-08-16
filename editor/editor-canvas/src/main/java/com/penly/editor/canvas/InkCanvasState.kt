@@ -9,7 +9,6 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
 import androidx.ink.strokes.InProgressStroke
@@ -66,9 +65,9 @@ class InkCanvasState {
     var selectionBounds by mutableStateOf<Rect?>(null)
         private set
 
-    /** Screen-space lasso polyline while a lasso drag is in progress; cleared on release. */
-    var lassoPoints by mutableStateOf(listOf<Offset>())
-        private set
+    /** Page-space lasso polyline while a lasso drag is in progress; cleared on release. */
+    var lassoPoints by mutableStateOf(listOf<Point>())
+        internal set
 
     /** Last measured canvas size in pixels; used to compute the viewport-center insert point. */
     var lastCanvasSize by mutableStateOf(Size.Zero)
@@ -120,9 +119,13 @@ class InkCanvasState {
         images[objectId] = bitmap
     }
 
-    /** Appends a screen-space lasso point while a lasso drag is in progress. */
-    fun addLassoPoint(position: Offset) {
-        lassoPoints = lassoPoints + position
+    /** Appends a page-space lasso point (converted from screen). */
+    fun addLassoPoint(
+        screenX: Float,
+        screenY: Float,
+    ) {
+        val pt = Point(viewport.screenToPageX(screenX), viewport.screenToPageY(screenY))
+        lassoPoints = lassoPoints + pt
     }
 
     fun pan(
@@ -148,7 +151,7 @@ class InkCanvasState {
         val stroke = InProgressStroke()
         try {
             stroke.start(BrushFactory.createBrush(tool, tool.defaultSize, tool.defaultColorArgb))
-            stroke.enqueueInputs(MutableStrokeInputBatch().add(firstInput), EMPTY_BATCH)
+            stroke.enqueueInputs(MutableStrokeInputBatch().add(firstInput), emptyBatch())
             stroke.updateShape()
         } catch (exception: RuntimeException) {
             Log.e(TAG, "startStroke rejected input", exception)
@@ -165,7 +168,7 @@ class InkCanvasState {
     ) {
         val stroke = inProgressStroke ?: return
         try {
-            stroke.enqueueInputs(MutableStrokeInputBatch().add(input), EMPTY_BATCH)
+            stroke.enqueueInputs(MutableStrokeInputBatch().add(input), emptyBatch())
             stroke.updateShape()
         } catch (exception: RuntimeException) {
             Log.e(TAG, "addInput rejected input", exception)
@@ -327,6 +330,17 @@ class InkCanvasState {
     }
 
     /**
+     * Clones then deletes every selected object (cut = copy + delete).
+     * The clones remain in the canvas; undo reverses both the insert
+     * of clones and the delete of originals.
+     */
+    fun cutSelection() {
+        if (selectedIds.isEmpty()) return
+        copySelection()
+        deleteSelection()
+    }
+
+    /**
      * Clones every selected object: strokes keep the immutable [androidx.ink.strokes.Stroke]
      * instance (shared) but get a fresh id; page objects are copied with a fresh id and the
      * same payloadRef. The clones land at the identical position (no nudge).
@@ -399,9 +413,10 @@ class InkCanvasState {
     }
 
     /**
-     * Selects everything intersecting the lasso polygon built from [pagePoints]: strokes whose
-     * effective bounds intersect the polygon or have any input point inside it, plus non-ink
-     * objects whose bounds intersect. A degenerate polygon clears the selection.
+     * Selects everything intersecting the lasso polygon: strokes
+     * whose effective bounds intersect the polygon or have any
+     * input point inside it, plus non-ink objects whose bounds
+     * intersect. A degenerate polygon clears the selection.
      */
     fun selectLasso(pagePoints: List<Point>) {
         lassoPoints = emptyList()
@@ -415,12 +430,18 @@ class InkCanvasState {
             val bounds = record.bounds
             val intersects =
                 path.intersects(
-                    Rect(bounds.left, bounds.top, bounds.right, bounds.bottom),
+                    Rect(
+                        bounds.left,
+                        bounds.top,
+                        bounds.right,
+                        bounds.bottom,
+                    ),
                 )
             var pointInside = false
             for (index in 0 until record.stroke.inputs.size) {
                 val input = record.stroke.inputs.get(index)
-                val pt = record.transform.apply(Point(input.x, input.y))
+                val pt =
+                    record.transform.apply(Point(input.x, input.y))
                 if (path.contains(pt)) {
                     pointInside = true
                     break
@@ -434,6 +455,26 @@ class InkCanvasState {
         selectedIds = ids
         selectionBounds = computeSelectionBounds(ids)
         bumpTick()
+    }
+
+    /**
+     * Direct selection: selects a single object (image/text) at the
+     * given page position. Returns the object id if hit, null if
+     * nothing was hit.
+     */
+    fun selectObjectAt(
+        pageX: Float,
+        pageY: Float,
+    ): ObjectId? {
+        // Iterate in reverse paint order so topmost object wins.
+        val hit =
+            objects.lastOrNull { obj ->
+                obj.bounds.contains(pageX, pageY)
+            } ?: return null
+        selectedIds = setOf(hit.objectId)
+        selectionBounds = computeSelectionBounds(selectedIds)
+        bumpTick()
+        return hit.objectId
     }
 
     /** True when the screen point lies inside the current selection bounds (page space). */
@@ -451,20 +492,39 @@ class InkCanvasState {
             if (record.objectId !in ids) continue
             val bounds = record.bounds
             union =
-                union?.union(Rect(bounds.left, bounds.top, bounds.right, bounds.bottom))
-                    ?: Rect(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                union?.union(
+                    Rect(
+                        bounds.left,
+                        bounds.top,
+                        bounds.right,
+                        bounds.bottom,
+                    ),
+                ) ?: Rect(
+                    bounds.left,
+                    bounds.top,
+                    bounds.right,
+                    bounds.bottom,
+                )
         }
         for (obj in objects) {
             if (obj.objectId in ids) {
                 union = union?.union(obj.bounds) ?: obj.bounds
             }
         }
-        return union
+        // Pad the selection bounds so stroke rendering overshoot
+        // doesn't visually overflow the selection rect.
+        return union?.inset(-SELECTION_PADDING)
     }
 
     private fun clearSelection() {
         selectedIds = emptySet()
         selectionBounds = null
+    }
+
+    /** Public entry point to clear the selection (e.g. tap-to-deselect). */
+    fun clearSelectionPublic() {
+        clearSelection()
+        bumpTick()
     }
 
     private fun addStrokeInternal(record: StrokeRecord) {
@@ -648,7 +708,10 @@ class InkCanvasState {
     }
 
     private companion object {
-        val EMPTY_BATCH = MutableStrokeInputBatch()
         const val TAG: String = "InkCanvasState"
+        const val SELECTION_PADDING: Float = 4f
+
+        /** Fresh empty batch per use — avoids shared mutable state. */
+        fun emptyBatch() = MutableStrokeInputBatch()
     }
 }

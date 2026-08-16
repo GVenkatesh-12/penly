@@ -32,9 +32,11 @@ data class CanvasViewport(
 
     fun screenToPageY(y: Float): Float = (y - offsetY) / scale
 
+    fun reset(): CanvasViewport = INITIAL
+
     companion object {
         const val MIN_SCALE: Float = 0.25f
-        const val MAX_SCALE: Float = 8f
+        const val MAX_SCALE: Float = 5f
         val INITIAL = CanvasViewport()
     }
 }

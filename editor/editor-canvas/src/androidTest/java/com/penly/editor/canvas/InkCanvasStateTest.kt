@@ -262,6 +262,66 @@ class InkCanvasStateTest {
     }
 
     @Test
+    fun cutSelection_copiesAndDeletesSelection_supportsUndo() {
+        val state = InkCanvasState()
+        addSampleStroke(state, 10f, 10f, 30f, 30f)
+        state.insertText("Cut Me", 20f, 0xFF000000.toInt(), Point(10f, 10f))
+
+        state.selectLasso(
+            listOf(
+                Point(0f, 0f),
+                Point(50f, 0f),
+                Point(50f, 50f),
+                Point(0f, 50f),
+            ),
+        )
+        assertEquals(2, state.selectedIds.size)
+
+        state.cutSelection()
+        // Cut clears selection, but clones remain on the canvas (like copy+delete)
+        assertEquals(0, state.selectedIds.size)
+        assertNull(state.selectionBounds)
+
+        // Undo once undoes the delete step of cut
+        state.undo()
+        assertEquals(2, state.strokes.size)
+        assertEquals(2, state.objects.size)
+    }
+
+    @Test
+    fun selectObjectAt_selectsTopmostObjectDirectly() {
+        val state = InkCanvasState()
+        state.insertText("Under", 20f, 0xFF000000.toInt(), Point(10f, 10f))
+        val underId = state.objects.first().objectId
+        state.insertText("Over", 20f, 0xFF000000.toInt(), Point(10f, 10f))
+        val overId = state.objects.last().objectId
+
+        // Point inside the bounds (10..10+width, 10..10+height)
+        val selectedId = state.selectObjectAt(15f, 15f)
+        assertEquals(overId, selectedId)
+        assertTrue(state.isSelected(overId))
+        assertFalse(state.isSelected(underId))
+        assertNotNull(state.selectionBounds)
+
+        // Miss returns null
+        val missId = state.selectObjectAt(500f, 500f)
+        assertNull(missId)
+    }
+
+    @Test
+    fun clearSelectionPublic_clearsSelectedIdsAndBounds() {
+        val state = InkCanvasState()
+        state.insertText("Target", 20f, 0xFF000000.toInt(), Point(20f, 20f))
+        state.selectObjectAt(25f, 25f)
+        assertTrue(state.selectedIds.isNotEmpty())
+        assertNotNull(state.selectionBounds)
+
+        state.clearSelectionPublic()
+        assertTrue(state.selectedIds.isEmpty())
+        assertNull(state.selectionBounds)
+    }
+
+    @Test
     fun eraseAt_removesHitStrokeAndSupportsUndo() {
         val state = InkCanvasState()
         addSampleStroke(state, 50f, 50f, 70f, 70f)

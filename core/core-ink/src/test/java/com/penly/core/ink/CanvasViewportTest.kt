@@ -45,7 +45,8 @@ class CanvasViewportTest {
 
     @Test
     fun zoomAt_clampsToMaximumScale() {
-        val zoomed = CanvasViewport.INITIAL.zoomAt(0f, 0f, factor = 1000f)
+        val zoomed = CanvasViewport.INITIAL.zoomAt(0f, 0f, factor = 100f)
+        assertEquals(5f, zoomed.scale)
         assertEquals(CanvasViewport.MAX_SCALE, zoomed.scale)
     }
 
@@ -58,5 +59,11 @@ class CanvasViewportTest {
         // After zoom: page point 30 should map back to screen x = 200
         assertEquals(200f, zoomed.pageToScreenX(30f), 1e-3f)
         assertEquals(0f, zoomed.pageToScreenY(0f), 1e-3f)
+    }
+
+    @Test
+    fun reset_returnsInitial() {
+        val modified = CanvasViewport(scale = 2f, offsetX = 10f, offsetY = 20f)
+        assertEquals(CanvasViewport.INITIAL, modified.reset())
     }
 }

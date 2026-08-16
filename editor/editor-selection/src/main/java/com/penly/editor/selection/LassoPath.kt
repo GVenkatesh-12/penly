@@ -8,11 +8,10 @@ import kotlin.math.min
 /**
  * A closed lasso polygon in page space, used to hit-test objects for selection.
  *
- * [contains] uses the classic ray-casting point-in-polygon test; [intersects] implements the
- * Phase 3 contract "any rect corner inside the polygon OR any polygon point inside the rect"
- * (edge-crossing-only overlaps are reported as non-intersecting — an acceptable approximation
- * for v0.1 lasso selection). Paths with fewer than 3 points are degenerate: [contains] and
- * [intersects] return false and [bounds] is the min/max of the points.
+ * [contains] uses the classic ray-casting point-in-polygon test; [intersects] checks if any
+ * rect corner is inside the polygon, any polygon point is inside the rect, or if any of their
+ * edges cross. Paths with fewer than 3 points are degenerate: [contains] and [intersects]
+ * return false and [bounds] is the min/max of the points.
  */
 class LassoPath private constructor(
     private val points: List<Point>,
@@ -39,7 +38,7 @@ class LassoPath private constructor(
         return inside
     }
 
-    /** True when [rect] overlaps the polygon: a corner inside the polygon or a point inside it. */
+    /** True when [rect] overlaps the polygon. */
     fun intersects(rect: Rect): Boolean {
         if (points.size < 3 || rect.isEmpty) return false
         if (
@@ -50,8 +49,53 @@ class LassoPath private constructor(
         ) {
             return true
         }
-        return points.any { rect.contains(it) }
+        if (points.any { rect.contains(it) }) return true
+
+        val rectPoints =
+            listOf(
+                Point(rect.left, rect.top),
+                Point(rect.right, rect.top),
+                Point(rect.right, rect.bottom),
+                Point(rect.left, rect.bottom),
+            )
+
+        var j = points.size - 1
+        for (i in points.indices) {
+            val p1 = points[j]
+            val p2 = points[i]
+            for (k in 0..3) {
+                val r1 = rectPoints[k]
+                val r2 = rectPoints[(k + 1) % 4]
+                if (segmentsIntersect(p1, p2, r1, r2)) return true
+            }
+            j = i
+        }
+        return false
     }
+
+    private fun segmentsIntersect(
+        p1: Point,
+        p2: Point,
+        p3: Point,
+        p4: Point,
+    ): Boolean {
+        val d1 = direction(p3, p4, p1)
+        val d2 = direction(p3, p4, p2)
+        val d3 = direction(p1, p2, p3)
+        val d4 = direction(p1, p2, p4)
+
+        val crossA =
+            (d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)
+        val crossB =
+            (d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)
+        return crossA && crossB
+    }
+
+    private fun direction(
+        a: Point,
+        b: Point,
+        c: Point,
+    ): Float = (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)
 
     companion object {
         /** Builds a lasso from [points] (may be empty or degenerate). */

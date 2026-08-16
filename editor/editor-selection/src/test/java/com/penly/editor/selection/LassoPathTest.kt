@@ -43,6 +43,18 @@ class LassoPathTest {
     }
 
     @Test
+    fun intersects_rectCrossesPolygonEdge() {
+        // A tall thin rect crossing the left edge of the square polygon (x=0)
+        // without any corners inside the polygon or polygon points inside the rect.
+        val crossingEdge = Rect(-10f, 40f, 10f, 60f)
+        assertTrue(square.intersects(crossingEdge))
+
+        // A wide thin rect crossing the top edge of the square polygon (y=0)
+        val crossingTopEdge = Rect(40f, -10f, 60f, 10f)
+        assertTrue(square.intersects(crossingTopEdge))
+    }
+
+    @Test
     fun intersects_rectDisjointFromPolygon() {
         assertFalse(square.intersects(Rect(150f, 150f, 200f, 200f)))
         assertFalse(square.intersects(Rect(-50f, -50f, -10f, -10f)))

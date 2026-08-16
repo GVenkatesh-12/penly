@@ -152,6 +152,9 @@ fun editorScreen(
                         TextButton(onClick = state::deleteSelection) {
                             Text("Delete")
                         }
+                        TextButton(onClick = state::cutSelection) {
+                            Text("Cut")
+                        }
                         TextButton(onClick = state::copySelection) {
                             Text("Copy")
                         }
