@@ -17,6 +17,7 @@ import androidx.ink.strokes.StrokeInput
 import com.penly.core.common.PenlyIds
 import com.penly.core.geometry.Point
 import com.penly.core.geometry.Rect
+import com.penly.core.geometry.Transform
 import com.penly.core.ink.BrushFactory
 import com.penly.core.ink.CanvasViewport
 import com.penly.core.ink.PenTool
@@ -413,6 +414,111 @@ class InkCanvasState {
     }
 
     /**
+     * Resizes selected items proportionally from [initialBounds] to [newBounds].
+     */
+    fun scaleSelection(
+        initialBounds: Rect,
+        newBounds: Rect,
+        initialStrokes: List<StrokeRecord>,
+        initialObjects: List<PageObject>,
+    ) {
+        if (initialBounds.width <= 0f || initialBounds.height <= 0f) return
+        val scaleX = newBounds.width / initialBounds.width
+        val scaleY = newBounds.height / initialBounds.height
+        val ids = selectedIds
+
+        for (index in strokes.indices) {
+            val record = strokes[index]
+            if (record.objectId in ids) {
+                val initial =
+                    initialStrokes.firstOrNull { it.objectId == record.objectId } ?: record
+                val relLeft = (initial.bounds.left - initialBounds.left) / initialBounds.width
+                val relTop = (initial.bounds.top - initialBounds.top) / initialBounds.height
+                val relRight = (initial.bounds.right - initialBounds.left) / initialBounds.width
+                val relBottom = (initial.bounds.bottom - initialBounds.top) / initialBounds.height
+
+                val newLeft = newBounds.left + relLeft * newBounds.width
+                val newTop = newBounds.top + relTop * newBounds.height
+                val newRight = newBounds.left + relRight * newBounds.width
+                val newBottom = newBounds.top + relBottom * newBounds.height
+
+                val newTransform =
+                    Transform(
+                        translationX =
+                            newBounds.left +
+                                (initial.transform.translationX - initialBounds.left) * scaleX,
+                        translationY =
+                            newBounds.top +
+                                (initial.transform.translationY - initialBounds.top) * scaleY,
+                        scaleX = initial.transform.scaleX * scaleX,
+                        scaleY = initial.transform.scaleY * scaleY,
+                        rotationDegrees = initial.transform.rotationDegrees,
+                    )
+                strokes[index] =
+                    record.copy(
+                        transform = newTransform,
+                        bounds = RectF(newLeft, newTop, newRight, newBottom),
+                    )
+            }
+        }
+
+        objects =
+            objects.map { obj ->
+                if (obj.objectId in ids) {
+                    val initial =
+                        initialObjects.firstOrNull { it.objectId == obj.objectId } ?: obj
+                    val relLeft = (initial.bounds.left - initialBounds.left) / initialBounds.width
+                    val relTop = (initial.bounds.top - initialBounds.top) / initialBounds.height
+                    val relRight = (initial.bounds.right - initialBounds.left) / initialBounds.width
+                    val relBottom = (initial.bounds.bottom - initialBounds.top) / initialBounds.height
+
+                    val newObjBounds =
+                        Rect(
+                            newBounds.left + relLeft * newBounds.width,
+                            newBounds.top + relTop * newBounds.height,
+                            newBounds.left + relRight * newBounds.width,
+                            newBounds.top + relBottom * newBounds.height,
+                        )
+                    if (obj is TextObject && initial is TextObject) {
+                        val avgScale = (scaleX + scaleY) / 2f
+                        obj.copy(
+                            fontSize = (initial.fontSize * avgScale).coerceAtLeast(8f),
+                            bounds = newObjBounds,
+                        )
+                    } else {
+                        obj.withTransform(
+                            transform = obj.transform,
+                            bounds = newObjBounds,
+                        )
+                    }
+                } else {
+                    obj
+                }
+            }
+        selectionBounds = newBounds
+        bumpTick()
+    }
+
+    /** Commits the resize gesture as an undoable command. */
+    fun commitResize(
+        initialStrokes: List<StrokeRecord>,
+        initialObjects: List<PageObject>,
+    ) {
+        val currentStrokes = strokes.filter { it.objectId in selectedIds }
+        val currentObjects = objects.filter { it.objectId in selectedIds }
+        if (currentStrokes == initialStrokes && currentObjects == initialObjects) return
+        val command =
+            ResizeSelection(
+                oldStrokes = initialStrokes,
+                newStrokes = currentStrokes,
+                oldObjects = initialObjects,
+                newObjects = currentObjects,
+            )
+        commands.push(command)
+        notifyPageChanged()
+    }
+
+    /**
      * Selects everything intersecting the lasso polygon: strokes
      * whose effective bounds intersect the polygon or have any
      * input point inside it, plus non-ink objects whose bounds
@@ -426,28 +532,32 @@ class InkCanvasState {
             return
         }
         val ids = mutableSetOf<ObjectId>()
+        val pathBounds = path.bounds
         for (record in strokes) {
             val bounds = record.bounds
-            val intersects =
-                path.intersects(
-                    Rect(
-                        bounds.left,
-                        bounds.top,
-                        bounds.right,
-                        bounds.bottom,
-                    ),
-                )
-            var pointInside = false
+            if (bounds.right < pathBounds.left ||
+                bounds.left > pathBounds.right ||
+                bounds.bottom < pathBounds.top ||
+                bounds.top > pathBounds.bottom
+            ) {
+                continue
+            }
+            var hit = false
+            var prevPoint: Point? = null
             for (index in 0 until record.stroke.inputs.size) {
                 val input = record.stroke.inputs.get(index)
-                val pt =
-                    record.transform.apply(Point(input.x, input.y))
+                val pt = record.transform.apply(Point(input.x, input.y))
                 if (path.contains(pt)) {
-                    pointInside = true
+                    hit = true
                     break
                 }
+                if (prevPoint != null && path.intersectsSegment(prevPoint, pt)) {
+                    hit = true
+                    break
+                }
+                prevPoint = pt
             }
-            if (intersects || pointInside) ids += record.objectId
+            if (hit) ids += record.objectId
         }
         for (obj in objects) {
             if (path.intersects(obj.bounds)) ids += obj.objectId
@@ -629,6 +739,26 @@ class InkCanvasState {
         )
     }
 
+    private fun replaceItemsInternal(
+        newStrokes: List<StrokeRecord>,
+        newObjects: List<PageObject>,
+    ) {
+        val strokeMap = newStrokes.associateBy { it.objectId }
+        for (index in strokes.indices) {
+            val updated = strokeMap[strokes[index].objectId]
+            if (updated != null) {
+                strokes[index] = updated
+            }
+        }
+        val objectMap = newObjects.associateBy { it.objectId }
+        objects =
+            objects.map { obj ->
+                objectMap[obj.objectId] ?: obj
+            }
+        selectionBounds = computeSelectionBounds(selectedIds)
+        notifyPageChanged()
+    }
+
     private fun notifyPageChanged() {
         onStrokesChanged?.invoke(strokes.toList())
         bumpTick()
@@ -665,6 +795,17 @@ class InkCanvasState {
         override fun undo(state: InkCanvasState) = state.translateObjectsInternal(objectIds, -dx, -dy)
 
         override fun redo(state: InkCanvasState) = state.translateObjectsInternal(objectIds, dx, dy)
+    }
+
+    private class ResizeSelection(
+        val oldStrokes: List<StrokeRecord>,
+        val newStrokes: List<StrokeRecord>,
+        val oldObjects: List<PageObject>,
+        val newObjects: List<PageObject>,
+    ) : EditorCommand {
+        override fun undo(state: InkCanvasState) = state.replaceItemsInternal(oldStrokes, oldObjects)
+
+        override fun redo(state: InkCanvasState) = state.replaceItemsInternal(newStrokes, newObjects)
     }
 
     private class DeleteSelection(

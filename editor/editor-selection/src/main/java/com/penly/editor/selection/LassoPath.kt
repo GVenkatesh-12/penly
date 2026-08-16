@@ -73,6 +73,20 @@ class LassoPath private constructor(
         return false
     }
 
+    /** True when the line segment from [p1] to [p2] intersects any polygon edge. */
+    fun intersectsSegment(
+        p1: Point,
+        p2: Point,
+    ): Boolean {
+        if (points.size < 3) return false
+        var j = points.size - 1
+        for (i in points.indices) {
+            if (segmentsIntersect(points[j], points[i], p1, p2)) return true
+            j = i
+        }
+        return false
+    }
+
     private fun segmentsIntersect(
         p1: Point,
         p2: Point,

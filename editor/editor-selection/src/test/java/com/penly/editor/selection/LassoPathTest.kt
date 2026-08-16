@@ -62,6 +62,16 @@ class LassoPathTest {
     }
 
     @Test
+    fun intersectsSegment_segmentCrossesEdge_returnsTrue() {
+        // Line segment from (-10, 50) to (10, 50) crosses the left edge (x=0) of square
+        assertTrue(square.intersectsSegment(Point(-10f, 50f), Point(10f, 50f)))
+        // Line segment completely outside
+        assertFalse(square.intersectsSegment(Point(-20f, 50f), Point(-5f, 50f)))
+        // Line segment completely inside
+        assertFalse(square.intersectsSegment(Point(20f, 50f), Point(80f, 50f)))
+    }
+
+    @Test
     fun degeneratePaths_returnFalse() {
         val empty = LassoPath.of(emptyList())
         assertFalse(empty.contains(Point(0f, 0f)))

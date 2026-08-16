@@ -339,6 +339,58 @@ class InkCanvasStateTest {
         assertEquals(1, state.strokes.size)
     }
 
+    @Test
+    fun lassoSelect_excludesStrokesWithOnlyOverlappingBoundingBoxes() {
+        val state = InkCanvasState()
+        // Diagonal stroke from (0,0) to (100,100). Bounding box is [0,0,100,100].
+        addSampleStroke(state, 0f, 0f, 100f, 100f)
+
+        // Lasso circle at bottom-left (10,80)-(30,95) inside the bounding box, but far from diagonal
+        val polygon =
+            listOf(
+                Point(10f, 80f),
+                Point(30f, 80f),
+                Point(30f, 95f),
+                Point(10f, 95f),
+            )
+        state.selectLasso(polygon)
+
+        // Must NOT select the stroke because stroke ink does not pass through lasso
+        assertEquals(0, state.selectedIds.size)
+        assertNull(state.selectionBounds)
+    }
+
+    @Test
+    fun scaleSelection_resizesImageObject_supportsUndoRedo() {
+        val state = InkCanvasState()
+        val imageId = ObjectId(PenlyIds.newId())
+        val initialBounds = Rect(10f, 10f, 50f, 50f)
+        state.insertImage(imageId, initialBounds, "image/png", null)
+
+        state.selectObjectAt(20f, 20f)
+        assertEquals(setOf(imageId), state.selectedIds)
+        val selBounds = state.selectionBounds!!
+
+        val initialObjects = state.objects.filter { it.objectId in state.selectedIds }
+        val targetBounds = Rect(10f, 10f, 90f, 90f)
+        state.scaleSelection(selBounds, targetBounds, emptyList(), initialObjects)
+        state.commitResize(emptyList(), initialObjects)
+
+        val resized = state.objects.first() as ImageObject
+        assertEquals(90f, resized.bounds.right, 1f)
+        assertEquals(90f, resized.bounds.bottom, 1f)
+
+        state.undo()
+        val undone = state.objects.first() as ImageObject
+        assertEquals(50f, undone.bounds.right, 1f)
+        assertEquals(50f, undone.bounds.bottom, 1f)
+
+        state.redo()
+        val redone = state.objects.first() as ImageObject
+        assertEquals(90f, redone.bounds.right, 1f)
+        assertEquals(90f, redone.bounds.bottom, 1f)
+    }
+
     private fun addSampleStroke(
         state: InkCanvasState,
         x1: Float,

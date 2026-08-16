@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -19,10 +20,14 @@ import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import com.penly.core.geometry.Rect
 import com.penly.core.geometry.Transform
 import com.penly.core.model.ImageObject
 import com.penly.core.model.PageObject
 import com.penly.core.model.TextObject
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 import android.graphics.Canvas as NativeCanvas
 import android.graphics.Rect as AndroidRect
 
@@ -60,10 +65,6 @@ fun inkCanvas(
                 nativeCanvas.save()
                 nativeCanvas.concat(matrix)
                 try {
-                    // Finished ink: per-object transform composed
-                    // with the viewport for correct rendering of
-                    // moved strokes. In-progress stroke stays on
-                    // the lowest-latency active stroke path.
                     for (record in state.strokes) {
                         if (record.transform == Transform.IDENTITY) {
                             renderer.draw(
@@ -92,20 +93,15 @@ fun inkCanvas(
                     state.inProgressStroke?.let { stroke ->
                         renderer.draw(nativeCanvas, stroke, matrix)
                     }
-                    // Non-ink objects in page space, under the
-                    // same viewport matrix.
                     for (obj in state.objects) {
                         drawObject(nativeCanvas, state, obj)
                     }
-                    // Lasso overlay in page space (already
-                    // stored as page coords).
                     drawLassoOverlay(nativeCanvas, state)
                 } catch (exception: RuntimeException) {
                     Log.w(TAG, "page rendering failed", exception)
                 } finally {
                     nativeCanvas.restore()
                 }
-                // Selection bounds in screen space.
                 drawSelectionBounds(nativeCanvas, state)
             }
         },
@@ -150,7 +146,7 @@ private val SELECTION_HANDLE_FILL =
 private val SELECTION_HANDLE_BORDER =
     Paint().apply {
         style = Paint.Style.STROKE
-        strokeWidth = 1.5f
+        strokeWidth = 2f
         color = 0xFFFFFFFF.toInt()
         isAntiAlias = true
     }
@@ -183,14 +179,12 @@ private val TEXT_PAINT =
         isAntiAlias = true
     }
 
-private const val HANDLE_RADIUS: Float = 5f
+private const val HANDLE_RADIUS: Float = 7f
+private const val HANDLE_TOUCH_RADIUS_PX: Float = 40f
+private const val MIN_SELECTION_SIZE: Float = 20f
 
 // ------ Transform helpers ------
 
-/**
- * Viewport matrix composed with an object transform:
- * `viewport * (T * R * S)`.
- */
 private fun composeTransform(
     viewportMatrix: Matrix,
     transform: Transform,
@@ -254,7 +248,6 @@ private fun drawObject(
                     )
                 nativeCanvas.drawBitmap(bitmap, null, rect, null)
             } else {
-                // Placeholder for images still loading.
                 nativeCanvas.drawRect(
                     bounds.left,
                     bounds.top,
@@ -286,11 +279,6 @@ private fun drawObject(
 
 // ------ Lasso + selection overlay ------
 
-/**
- * Draws the lasso polyline in page space: a closed dashed
- * stroke with a translucent fill so the user sees the
- * enclosed region while dragging.
- */
 private fun drawLassoOverlay(
     nativeCanvas: NativeCanvas,
     state: InkCanvasState,
@@ -305,9 +293,6 @@ private fun drawLassoOverlay(
         }
     }
     path.close()
-    // Scale the dash intervals and stroke width inversely
-    // with viewport scale so the lasso looks consistent
-    // regardless of zoom level.
     val invScale = 1f / state.viewport.scale
     LASSO_STROKE_PAINT.strokeWidth = 2f * invScale
     LASSO_STROKE_PAINT.pathEffect =
@@ -319,10 +304,6 @@ private fun drawLassoOverlay(
     nativeCanvas.drawPath(path, LASSO_STROKE_PAINT)
 }
 
-/**
- * Draws the selection bounding rectangle and 4-corner resize
- * handles in screen space (manual viewport conversion).
- */
 private fun drawSelectionBounds(
     nativeCanvas: NativeCanvas,
     state: InkCanvasState,
@@ -339,19 +320,18 @@ private fun drawSelectionBounds(
         bottom,
         SELECTION_RECT_PAINT,
     )
-    // 4-corner handles.
     for ((hx, hy) in cornerHandles(left, top, right, bottom)) {
         nativeCanvas.drawCircle(
             hx,
             hy,
             HANDLE_RADIUS,
-            SELECTION_HANDLE_FILL,
+            SELECTION_HANDLE_BORDER,
         )
         nativeCanvas.drawCircle(
             hx,
             hy,
-            HANDLE_RADIUS,
-            SELECTION_HANDLE_BORDER,
+            HANDLE_RADIUS - 1.5f,
+            SELECTION_HANDLE_FILL,
         )
     }
 }
@@ -363,15 +343,43 @@ private fun cornerHandles(
     b: Float,
 ): List<Pair<Float, Float>> = listOf(l to t, r to t, l to b, r to b)
 
+private enum class SelectionHandle {
+    TOP_LEFT,
+    TOP_RIGHT,
+    BOTTOM_LEFT,
+    BOTTOM_RIGHT,
+}
+
+private fun hitTestHandle(
+    state: InkCanvasState,
+    screenPos: Offset,
+): SelectionHandle? {
+    val bounds = state.selectionBounds ?: return null
+    val sl = state.viewport.pageToScreenX(bounds.left)
+    val st = state.viewport.pageToScreenY(bounds.top)
+    val sr = state.viewport.pageToScreenX(bounds.right)
+    val sb = state.viewport.pageToScreenY(bounds.bottom)
+
+    fun hit(
+        x: Float,
+        y: Float,
+    ): Boolean {
+        val dx = screenPos.x - x
+        val dy = screenPos.y - y
+        return (dx * dx + dy * dy) <= (HANDLE_TOUCH_RADIUS_PX * HANDLE_TOUCH_RADIUS_PX)
+    }
+
+    return when {
+        hit(sl, st) -> SelectionHandle.TOP_LEFT
+        hit(sr, st) -> SelectionHandle.TOP_RIGHT
+        hit(sl, sb) -> SelectionHandle.BOTTOM_LEFT
+        hit(sr, sb) -> SelectionHandle.BOTTOM_RIGHT
+        else -> null
+    }
+}
+
 // ------ Gesture routing ------
 
-/**
- * Routes one gesture. Draw/erase mode feeds
- * [InkInputHandler]; selection mode pans/zooms with two
- * pointers, moves the selection with one pointer inside it,
- * taps an object to select it, or lasso-selects with one
- * pointer outside it. Double-tap resets the viewport.
- */
 private fun Modifier.inkInput(state: InkCanvasState): Modifier =
     pointerInput(state) {
         awaitEachGesture {
@@ -420,9 +428,6 @@ private suspend fun AwaitPointerEventScope.handleDrawGesture(
                 val newCentroid = centroidOf(pressed)
                 val newSpan = spanOf(pressed)
                 if (!wasMultiTouch) {
-                    // First multi-touch frame: initialise
-                    // baseline but skip zoom/pan to avoid
-                    // the initial jitter.
                     wasMultiTouch = true
                 } else if (span > 0f) {
                     state.zoomAt(
@@ -467,16 +472,17 @@ private suspend fun AwaitPointerEventScope.handleDrawGesture(
     handler.onUp()
 }
 
-private enum class SelectionGesture { MOVE, LASSO }
+private sealed interface SelectionGestureMode {
+    data object Move : SelectionGestureMode
 
-/**
- * Minimum movement to distinguish a drag from a tap (px).
- */
+    data object Lasso : SelectionGestureMode
+
+    data class Resize(
+        val handle: SelectionHandle,
+    ) : SelectionGestureMode
+}
+
 private const val TAP_SLOP: Float = 12f
-
-/**
- * Maximum duration for a tap gesture (ms).
- */
 private const val TAP_TIMEOUT: Long = 200L
 
 private suspend fun AwaitPointerEventScope.handleSelectionGesture(
@@ -488,21 +494,33 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
     val downTime = down.uptimeMillis
     val downPage = state.viewport.screenToPage(downPos)
 
-    // Decide initial mode: tap inside selection → move;
-    // tap on an object → select it & move; otherwise lasso.
-    val hitSelection =
-        state.hitTestSelection(downPos.x, downPos.y)
-    val hitObject =
-        if (!hitSelection) {
-            state.selectObjectAt(downPage.x, downPage.y)
+    val hitHandle = hitTestHandle(state, downPos)
+    val initialBounds = state.selectionBounds
+    val initialStrokes =
+        if (hitHandle != null && initialBounds != null) {
+            state.strokes.filter { it.objectId in state.selectedIds }
         } else {
-            null
+            emptyList()
         }
-    val mode =
-        if (hitSelection || hitObject != null) {
-            SelectionGesture.MOVE
+    val initialObjects =
+        if (hitHandle != null && initialBounds != null) {
+            state.objects.filter { it.objectId in state.selectedIds }
         } else {
-            SelectionGesture.LASSO
+            emptyList()
+        }
+
+    val mode: SelectionGestureMode =
+        if (hitHandle != null) {
+            SelectionGestureMode.Resize(hitHandle)
+        } else if (state.hitTestSelection(downPos.x, downPos.y)) {
+            SelectionGestureMode.Move
+        } else {
+            val hitObject = state.selectObjectAt(downPage.x, downPage.y)
+            if (hitObject != null) {
+                SelectionGestureMode.Move
+            } else {
+                SelectionGestureMode.Lasso
+            }
         }
 
     var centroid = downPos
@@ -536,9 +554,7 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
                 }
                 centroid = newCentroid
                 span = newSpan
-                // Viewport changed; reset move baseline.
-                val pageNow =
-                    state.viewport.screenToPage(newCentroid)
+                val pageNow = state.viewport.screenToPage(newCentroid)
                 lastPageX = pageNow.x
                 lastPageY = pageNow.y
                 pressed.forEach { it.consume() }
@@ -548,27 +564,55 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
                 if (change.id == activePointerId) {
                     val dx = change.position.x - downPos.x
                     val dy = change.position.y - downPos.y
-                    val dist = kotlin.math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                    val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
                     if (dist > maxDist) maxDist = dist
                     when (mode) {
-                        SelectionGesture.MOVE -> {
-                            val pageNow =
-                                state.viewport.screenToPage(
-                                    change.position,
+                        is SelectionGestureMode.Resize -> {
+                            if (initialBounds != null) {
+                                val pageNow = state.viewport.screenToPage(change.position)
+                                val newBounds =
+                                    when (mode.handle) {
+                                        SelectionHandle.TOP_LEFT -> {
+                                            val l = min(pageNow.x, initialBounds.right - MIN_SELECTION_SIZE)
+                                            val t = min(pageNow.y, initialBounds.bottom - MIN_SELECTION_SIZE)
+                                            Rect(l, t, initialBounds.right, initialBounds.bottom)
+                                        }
+                                        SelectionHandle.TOP_RIGHT -> {
+                                            val r = max(pageNow.x, initialBounds.left + MIN_SELECTION_SIZE)
+                                            val t = min(pageNow.y, initialBounds.bottom - MIN_SELECTION_SIZE)
+                                            Rect(initialBounds.left, t, r, initialBounds.bottom)
+                                        }
+                                        SelectionHandle.BOTTOM_LEFT -> {
+                                            val l = min(pageNow.x, initialBounds.right - MIN_SELECTION_SIZE)
+                                            val b = max(pageNow.y, initialBounds.top + MIN_SELECTION_SIZE)
+                                            Rect(l, initialBounds.top, initialBounds.right, b)
+                                        }
+                                        SelectionHandle.BOTTOM_RIGHT -> {
+                                            val r = max(pageNow.x, initialBounds.left + MIN_SELECTION_SIZE)
+                                            val b = max(pageNow.y, initialBounds.top + MIN_SELECTION_SIZE)
+                                            Rect(initialBounds.left, initialBounds.top, r, b)
+                                        }
+                                    }
+                                state.scaleSelection(
+                                    initialBounds,
+                                    newBounds,
+                                    initialStrokes,
+                                    initialObjects,
                                 )
-                            val dx = pageNow.x - lastPageX
-                            val dy = pageNow.y - lastPageY
-                            state.moveSelection(dx, dy)
-                            totalDx += dx
-                            totalDy += dy
+                            }
+                        }
+                        is SelectionGestureMode.Move -> {
+                            val pageNow = state.viewport.screenToPage(change.position)
+                            val mdx = pageNow.x - lastPageX
+                            val mdy = pageNow.y - lastPageY
+                            state.moveSelection(mdx, mdy)
+                            totalDx += mdx
+                            totalDy += mdy
                             lastPageX = pageNow.x
                             lastPageY = pageNow.y
                         }
-                        SelectionGesture.LASSO -> {
-                            state.addLassoPoint(
-                                change.position.x,
-                                change.position.y,
-                            )
+                        is SelectionGestureMode.Lasso -> {
+                            state.addLassoPoint(change.position.x, change.position.y)
                         }
                     }
                     centroid = change.position
@@ -585,21 +629,21 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
     val elapsed = System.currentTimeMillis() - downTime
     val isTap = maxDist < TAP_SLOP && elapsed < TAP_TIMEOUT
     when (mode) {
-        SelectionGesture.MOVE -> {
-            if (isTap) {
-                // Tap inside selection without dragging —
-                // keep selection as-is (no commit needed).
-            } else {
+        is SelectionGestureMode.Resize -> {
+            if (!isTap && initialBounds != null) {
+                state.commitResize(initialStrokes, initialObjects)
+            }
+        }
+        is SelectionGestureMode.Move -> {
+            if (!isTap) {
                 state.commitMove(totalDx, totalDy)
             }
         }
-        SelectionGesture.LASSO -> {
+        is SelectionGestureMode.Lasso -> {
             if (isTap) {
-                // Tap outside selection = deselect.
                 state.lassoPoints = emptyList()
                 state.clearSelectionPublic()
             } else {
-                // Lasso points are already in page space.
                 state.selectLasso(state.lassoPoints)
             }
         }
