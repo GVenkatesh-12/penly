@@ -30,9 +30,13 @@ fun brushBar(
     ) {
         PenTool.entries.forEach { entry ->
             FilterChip(
-                selected = tool == entry,
-                onClick = { onToolSelected(entry) },
-                enabled = !selectionMode,
+                selected = !selectionMode && tool == entry,
+                onClick = {
+                    onToolSelected(entry)
+                    if (selectionMode) {
+                        onSelectionModeChange(false)
+                    }
+                },
                 label = { Text(entry.label) },
             )
         }

@@ -197,7 +197,52 @@ class InkCanvasStateTest {
     }
 
     @Test
-    fun copySelection_duplicatesWithNewIdsAndCopiesBitmaps() {
+    fun copySelection_andPaste_insertsClonesAndSupportsUndo() {
+        val state = InkCanvasState()
+        addSampleStroke(state, 10f, 10f, 30f, 30f)
+        val imageId = ObjectId(PenlyIds.newId())
+        val bitmap = Bitmap.createBitmap(40, 40, Bitmap.Config.ARGB_8888)
+        state.insertImage(imageId, Rect(10f, 10f, 50f, 50f), "image/png", "assets/sample.png")
+        state.setImage(imageId, bitmap)
+
+        state.selectLasso(
+            listOf(
+                Point(0f, 0f),
+                Point(60f, 0f),
+                Point(60f, 60f),
+                Point(0f, 60f),
+            ),
+        )
+        assertEquals(2, state.selectedIds.size)
+        assertFalse(state.canPaste)
+
+        state.copySelection()
+        assertTrue(state.canPaste)
+        assertEquals(1, state.strokes.size)
+        assertEquals(1, state.objects.size)
+
+        val pasted = state.paste(Point(100f, 100f))
+        assertTrue(pasted)
+        assertEquals(2, state.strokes.size)
+        assertEquals(2, state.objects.size)
+
+        val clonedImage = state.objects.last() as ImageObject
+        assertTrue(clonedImage.objectId != imageId)
+        assertNotNull(state.images[clonedImage.objectId])
+        assertEquals(bitmap, state.images[clonedImage.objectId])
+
+        // Single undo reverses the whole paste action
+        state.undo()
+        assertEquals(1, state.strokes.size)
+        assertEquals(1, state.objects.size)
+
+        state.redo()
+        assertEquals(2, state.strokes.size)
+        assertEquals(2, state.objects.size)
+    }
+
+    @Test
+    fun duplicateSelection_clonesWithOffsetAndSupportsUndo() {
         val state = InkCanvasState()
         addSampleStroke(state, 10f, 10f, 30f, 30f)
         val imageId = ObjectId(PenlyIds.newId())
@@ -215,16 +260,15 @@ class InkCanvasStateTest {
         )
         assertEquals(2, state.selectedIds.size)
 
-        state.copySelection()
+        state.duplicateSelection(Point(30f, 30f))
         assertEquals(2, state.strokes.size)
         assertEquals(2, state.objects.size)
 
         val clonedImage = state.objects.last() as ImageObject
         assertTrue(clonedImage.objectId != imageId)
-        assertNotNull(state.images[clonedImage.objectId])
-        assertEquals(bitmap, state.images[clonedImage.objectId])
+        assertEquals(40f, clonedImage.bounds.left, 0.01f)
+        assertEquals(40f, clonedImage.bounds.top, 0.01f)
 
-        // Single undo reverses the whole copy action
         state.undo()
         assertEquals(1, state.strokes.size)
         assertEquals(1, state.objects.size)
@@ -262,7 +306,7 @@ class InkCanvasStateTest {
     }
 
     @Test
-    fun cutSelection_copiesAndDeletesSelection_supportsUndo() {
+    fun cutSelection_copiesToClipboardAndDeletesSelection_supportsUndo() {
         val state = InkCanvasState()
         addSampleStroke(state, 10f, 10f, 30f, 30f)
         state.insertText("Cut Me", 20f, 0xFF000000.toInt(), Point(10f, 10f))
@@ -278,12 +322,19 @@ class InkCanvasStateTest {
         assertEquals(2, state.selectedIds.size)
 
         state.cutSelection()
-        // Cut clears selection, but clones remain on the canvas (like copy+delete)
+        assertTrue(state.canPaste)
+        assertEquals(0, state.strokes.size)
+        assertEquals(0, state.objects.size)
         assertEquals(0, state.selectedIds.size)
         assertNull(state.selectionBounds)
 
-        // Undo once undoes the delete step of cut
+        // Undo restores cut items
         state.undo()
+        assertEquals(1, state.strokes.size)
+        assertEquals(1, state.objects.size)
+
+        // Pasting still works
+        state.paste(Point(100f, 100f))
         assertEquals(2, state.strokes.size)
         assertEquals(2, state.objects.size)
     }
@@ -324,18 +375,45 @@ class InkCanvasStateTest {
     @Test
     fun eraseAt_removesHitStrokeAndSupportsUndo() {
         val state = InkCanvasState()
-        addSampleStroke(state, 50f, 50f, 70f, 70f)
+        // Diagonal stroke from (0,0) to (100,100). Bounding box is [0,0,100,100].
+        addSampleStroke(state, 0f, 0f, 100f, 100f)
         assertEquals(1, state.strokes.size)
 
-        // Miss
-        state.eraseAt(10f, 10f, 5f)
+        // Point at (10, 80) is inside the bounding box [0,0,100,100], but far from the diagonal segment
+        state.eraseAt(10f, 80f, 10f)
         assertEquals(1, state.strokes.size)
 
-        // Hit
-        state.eraseAt(60f, 60f, 15f)
+        // Point at (50, 50) is directly on the diagonal stroke -> hit and erased
+        state.eraseAt(50f, 50f, 10f)
         assertEquals(0, state.strokes.size)
 
         state.undo()
+        assertEquals(1, state.strokes.size)
+    }
+
+    @Test
+    fun eraseGesture_batchesDeletionsIntoSingleUndoStep() {
+        val state = InkCanvasState()
+        addSampleStroke(state, 0f, 0f, 10f, 10f)
+        addSampleStroke(state, 20f, 20f, 30f, 30f)
+        addSampleStroke(state, 40f, 40f, 50f, 50f)
+        assertEquals(3, state.strokes.size)
+
+        val erasedStrokes = mutableListOf<Pair<Int, StrokeRecord>>()
+        val (hit1, _) = state.eraseImmediately(5f, 5f, 10f)
+        hit1?.let { erasedStrokes += it }
+        val (hit2, _) = state.eraseImmediately(25f, 25f, 10f)
+        hit2?.let { erasedStrokes += it }
+
+        assertEquals(1, state.strokes.size)
+        assertEquals(2, erasedStrokes.size)
+
+        state.commitEraseGesture(erasedStrokes, emptyList())
+        // Single undo step restores both erased strokes
+        state.undo()
+        assertEquals(3, state.strokes.size)
+
+        state.redo()
         assertEquals(1, state.strokes.size)
     }
 

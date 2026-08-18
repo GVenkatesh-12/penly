@@ -63,6 +63,7 @@ fun editorScreen(
     documentIdProvider: () -> DocumentId? = { null },
 ) {
     var showTextDialog by remember { mutableStateOf(false) }
+    var showClearDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val imagePicker =
@@ -129,7 +130,7 @@ fun editorScreen(
                     TextButton(onClick = state::redo, enabled = state.canRedo) {
                         Text("Redo")
                     }
-                    TextButton(onClick = state::clearAll) {
+                    TextButton(onClick = { showClearDialog = true }) {
                         Text("Clear")
                     }
                     TextButton(onClick = { showTextDialog = true }) {
@@ -157,6 +158,14 @@ fun editorScreen(
                         }
                         TextButton(onClick = state::copySelection) {
                             Text("Copy")
+                        }
+                        TextButton(onClick = { state.duplicateSelection() }) {
+                            Text("Duplicate")
+                        }
+                    }
+                    if (state.canPaste) {
+                        TextButton(onClick = { state.paste() }) {
+                            Text("Paste")
                         }
                     }
                 },
@@ -196,6 +205,8 @@ fun editorScreen(
                     value = textInput,
                     onValueChange = { textInput = it },
                     label = { Text("Text") },
+                    singleLine = false,
+                    maxLines = 5,
                 )
             },
             confirmButton = {
@@ -222,6 +233,28 @@ fun editorScreen(
             },
         )
     }
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear page") },
+            text = { Text("Are you sure you want to clear all strokes and objects on this page?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.clearAll()
+                        showClearDialog = false
+                    },
+                ) {
+                    Text("Clear")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
 }
 
 /**
@@ -239,7 +272,7 @@ fun editorScreen(
     val state = rememberInkCanvasState()
     val scope = rememberCoroutineScope()
     val saveMutex = remember { Mutex() }
-    var document by remember { mutableStateOf<Document?>(null) }
+    var document by remember { mutableStateOf<Document?>(createFreshDocument()) }
     val currentDocument by rememberUpdatedState(document)
 
     LaunchedEffect(store) {

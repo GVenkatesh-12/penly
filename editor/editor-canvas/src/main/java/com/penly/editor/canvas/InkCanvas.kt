@@ -207,14 +207,18 @@ private fun drawObject(
         is TextObject -> {
             TEXT_PAINT.textSize = obj.fontSize
             TEXT_PAINT.color = obj.colorArgb
-            val baseline =
-                obj.bounds.top - TEXT_PAINT.fontMetrics.ascent
-            nativeCanvas.drawText(
-                obj.text,
-                obj.bounds.left,
-                baseline,
-                TEXT_PAINT,
-            )
+            val lines = obj.text.split('\n')
+            var baseline = obj.bounds.top - TEXT_PAINT.fontMetrics.ascent
+            val lineSpacing = TEXT_PAINT.fontSpacing
+            for (line in lines) {
+                nativeCanvas.drawText(
+                    line,
+                    obj.bounds.left,
+                    baseline,
+                    TEXT_PAINT,
+                )
+                baseline += lineSpacing
+            }
             if (isSelected) {
                 nativeCanvas.drawRect(
                     obj.bounds.left,

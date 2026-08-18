@@ -32,6 +32,14 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 
+/** In-memory clipboard payload holding copied strokes, non-ink objects and decoded bitmaps. */
+data class ClipboardData(
+    val strokes: List<StrokeRecord>,
+    val objects: List<PageObject>,
+    val images: Map<ObjectId, Bitmap>,
+    val originBounds: Rect,
+)
+
 /**
  * Mutable editor state for the ink canvas: committed strokes, non-ink page objects (text,
  * image), live lasso selection, and an undo/redo command stack. Every page mutation goes
@@ -79,6 +87,13 @@ class InkCanvasState {
 
     /** Image bitmaps for [ImageObject]s, injected after load (the payloadRef names the asset). */
     val images = mutableStateMapOf<ObjectId, Bitmap>()
+
+    /** In-memory clipboard for copied/cut page items. */
+    var clipboard by mutableStateOf<ClipboardData?>(null)
+        private set
+
+    val canPaste: Boolean
+        get() = clipboard != null
 
     /** Invoked after any page mutation, with a snapshot of all strokes. */
     var onStrokesChanged: ((List<StrokeRecord>) -> Unit)? = null
@@ -246,26 +261,156 @@ class InkCanvasState {
         bumpTick()
     }
 
+    fun findHitStroke(
+        pageX: Float,
+        pageY: Float,
+        radius: Float,
+    ): StrokeRecord? {
+        val touchPt = Point(pageX, pageY)
+        for (index in strokes.indices.reversed()) {
+            val record = strokes[index]
+            val b = record.bounds
+            if (
+                pageX < b.left - radius ||
+                pageX > b.right + radius ||
+                pageY < b.top - radius ||
+                pageY > b.bottom + radius
+            ) {
+                continue
+            }
+            var hit = false
+            var prev: Point? = null
+            val inputs = record.stroke.inputs
+            for (i in 0 until inputs.size) {
+                val input = inputs.get(i)
+                val pt = record.transform.apply(Point(input.x, input.y))
+                if (distance(touchPt, pt) <= radius) {
+                    hit = true
+                    break
+                }
+                if (prev != null && distanceToSegment(touchPt, prev, pt) <= radius) {
+                    hit = true
+                    break
+                }
+                prev = pt
+            }
+            if (hit) return record
+        }
+        return null
+    }
+
+    fun findHitObject(
+        pageX: Float,
+        pageY: Float,
+        radius: Float,
+    ): PageObject? =
+        objects.lastOrNull { obj ->
+            val b = obj.bounds
+            val expanded =
+                Rect(
+                    b.left - radius,
+                    b.top - radius,
+                    b.right + radius,
+                    b.bottom + radius,
+                )
+            expanded.contains(pageX, pageY)
+        }
+
+    /**
+     * Erases a hit item immediately from the active canvas collections without pushing
+     * a command yet, allowing continuous gestures to accumulate all deletions into a single
+     * undo step.
+     */
+    fun eraseImmediately(
+        pageX: Float,
+        pageY: Float,
+        radius: Float,
+    ): Pair<Pair<Int, StrokeRecord>?, Pair<Int, PageObject>?> {
+        val hitStroke = findHitStroke(pageX, pageY, radius)
+        if (hitStroke != null) {
+            val index = strokes.indexOf(hitStroke)
+            strokes.removeAt(index)
+            notifyPageChanged()
+            return (index to hitStroke) to null
+        }
+        val hitObject = findHitObject(pageX, pageY, radius)
+        if (hitObject != null) {
+            val index = objects.indexOf(hitObject)
+            val list = objects.toMutableList()
+            list.removeAt(index)
+            objects = list
+            notifyPageChanged()
+            return null to (index to hitObject)
+        }
+        return null to null
+    }
+
+    /** Commits an erase gesture's accumulated deletions as a single atomic undoable command. */
+    fun commitEraseGesture(
+        removedStrokes: List<Pair<Int, StrokeRecord>>,
+        removedObjects: List<Pair<Int, PageObject>>,
+    ) {
+        if (removedStrokes.isEmpty() && removedObjects.isEmpty()) return
+        val command =
+            DeleteSelection(
+                removedStrokes = removedStrokes.map { it.second },
+                strokeIndices = removedStrokes.map { it.first },
+                removedObjects = removedObjects.map { it.second },
+                objectIndices = removedObjects.map { it.first },
+            )
+        commands.push(command)
+        notifyPageChanged()
+    }
+
+    /** Restores items erased in a gesture that was aborted. */
+    fun abortEraseGesture(
+        removedStrokes: List<Pair<Int, StrokeRecord>>,
+        removedObjects: List<Pair<Int, PageObject>>,
+    ) {
+        if (removedStrokes.isNotEmpty()) {
+            restoreStrokesInternal(
+                removedStrokes.map { it.first },
+                removedStrokes.map { it.second },
+            )
+        }
+        if (removedObjects.isNotEmpty()) {
+            restoreObjectsInternal(
+                removedObjects.map { it.first },
+                removedObjects.map { it.second },
+            )
+        }
+    }
+
     fun eraseAt(
         pageX: Float,
         pageY: Float,
         radius: Float,
     ) {
-        val hit =
-            strokes.lastOrNull { record ->
-                val bounds = RectF(record.bounds)
-                bounds.inset(-radius, -radius)
-                bounds.contains(pageX, pageY)
-            } ?: return
-        val command =
-            DeleteSelection(
-                removedStrokes = listOf(hit),
-                strokeIndices = listOf(strokes.indexOf(hit)),
-                removedObjects = emptyList(),
-                objectIndices = emptyList(),
-            )
-        commands.push(command)
-        command.redo(this)
+        val hitStroke = findHitStroke(pageX, pageY, radius)
+        if (hitStroke != null) {
+            val command =
+                DeleteSelection(
+                    removedStrokes = listOf(hitStroke),
+                    strokeIndices = listOf(strokes.indexOf(hitStroke)),
+                    removedObjects = emptyList(),
+                    objectIndices = emptyList(),
+                )
+            commands.push(command)
+            command.redo(this)
+            return
+        }
+        val hitObject = findHitObject(pageX, pageY, radius)
+        if (hitObject != null) {
+            val command =
+                DeleteSelection(
+                    removedStrokes = emptyList(),
+                    strokeIndices = emptyList(),
+                    removedObjects = listOf(hitObject),
+                    objectIndices = listOf(objects.indexOf(hitObject)),
+                )
+            commands.push(command)
+            command.redo(this)
+        }
     }
 
     /** Inserts a text object at page position [at]; the action is undoable. */
@@ -275,20 +420,30 @@ class InkCanvasState {
         colorArgb: Int,
         at: Point,
     ) {
-        if (text.isEmpty()) return
-        val paint = android.graphics.Paint()
-        paint.textSize = fontSize
-        val width = paint.measureText(text)
+        val trimmed = text.trim()
+        if (trimmed.isEmpty()) return
+        val paint =
+            android.graphics.Paint().apply {
+                textSize = fontSize
+            }
+        val lines = trimmed.split('\n')
+        val maxWidth = lines.maxOfOrNull { paint.measureText(it) }?.coerceAtLeast(20f) ?: 20f
         val fm = paint.fontMetrics
-        val height = fm.descent - fm.ascent
+        val singleLineHeight = fm.descent - fm.ascent
+        val totalHeight =
+            if (lines.size <= 1) {
+                singleLineHeight
+            } else {
+                singleLineHeight + (lines.size - 1) * paint.fontSpacing
+            }
         val now = System.currentTimeMillis()
         val objectText =
             TextObject(
                 objectId = ObjectId(PenlyIds.newId()),
-                bounds = Rect(at.x, at.y, at.x + width, at.y + height),
+                bounds = Rect(at.x, at.y, at.x + maxWidth, at.y + totalHeight),
                 createdAtMillis = now,
                 updatedAtMillis = now,
-                text = text,
+                text = trimmed,
                 fontSize = fontSize,
                 colorArgb = colorArgb,
             )
@@ -337,29 +492,90 @@ class InkCanvasState {
         clearSelection()
     }
 
-    /**
-     * Clones then deletes every selected object (cut = copy + delete).
-     * The clones remain in the canvas; undo reverses both the insert
-     * of clones and the delete of originals.
-     */
+    /** Copies the currently selected strokes and objects to the in-memory clipboard. */
+    fun copySelection() {
+        if (selectedIds.isEmpty()) return
+        val ids = selectedIds
+        val selStrokes = strokes.filter { it.objectId in ids }
+        val selObjects = objects.filter { it.objectId in ids }
+        val selImages =
+            selObjects
+                .filterIsInstance<ImageObject>()
+                .mapNotNull { obj ->
+                    images[obj.objectId]?.let { obj.objectId to it }
+                }.toMap()
+        val bounds = selectionBounds ?: Rect(0f, 0f, 0f, 0f)
+        clipboard =
+            ClipboardData(
+                strokes = selStrokes,
+                objects = selObjects,
+                images = selImages,
+                originBounds = bounds,
+            )
+    }
+
+    /** Cuts the currently selected objects (copies to clipboard, then deletes from canvas). */
     fun cutSelection() {
         if (selectedIds.isEmpty()) return
         copySelection()
         deleteSelection()
     }
 
-    /**
-     * Clones every selected object: strokes keep the immutable [androidx.ink.strokes.Stroke]
-     * instance (shared) but get a fresh id; page objects are copied with a fresh id and the
-     * same payloadRef. The clones land at the identical position (no nudge).
-     */
-    fun copySelection() {
+    /** Pastes clipboard content at [targetCenter] or viewport center, and selects the pasted items. */
+    fun paste(targetCenter: Point? = null): Boolean {
+        val clip = clipboard ?: return false
+        val center =
+            targetCenter ?: run {
+                val size = lastCanvasSize
+                Point(
+                    viewport.screenToPageX(size.width / 2f),
+                    viewport.screenToPageY(size.height / 2f),
+                )
+            }
+        val origCenter = clip.originBounds.center
+        val dx = center.x - origCenter.x
+        val dy = center.y - origCenter.y
+
+        val newStrokes =
+            clip.strokes.map { record ->
+                val newId = ObjectId(PenlyIds.newId())
+                translateRecord(record, dx, dy).copy(objectId = newId)
+            }
+        val newObjects =
+            clip.objects.map { obj ->
+                val newId = ObjectId(PenlyIds.newId())
+                if (obj is ImageObject) {
+                    clip.images[obj.objectId]?.let { images[newId] = it }
+                }
+                val translated =
+                    obj.withTransform(
+                        transform = obj.transform.translate(dx, dy),
+                        bounds = obj.bounds.translate(dx, dy),
+                    )
+                translated.withObjectId(newId)
+            }
+        val command = InsertItems(newStrokes, newObjects)
+        commands.push(command)
+        command.redo(this)
+
+        selectedIds = (newStrokes.map { it.objectId } + newObjects.map { it.objectId }).toSet()
+        selectionBounds = computeSelectionBounds(selectedIds)
+        setSelectionMode(true)
+        bumpTick()
+        return true
+    }
+
+    /** Duplicates currently selected items with a small offset and selects the duplicates. */
+    fun duplicateSelection(offset: Point = Point(DUPLICATE_OFFSET, DUPLICATE_OFFSET)) {
         if (selectedIds.isEmpty()) return
         val ids = selectedIds
         val clonedStrokes =
             strokes
                 .filter { it.objectId in ids }
-                .map { record -> record.copy(objectId = ObjectId(PenlyIds.newId())) }
+                .map { record ->
+                    val newId = ObjectId(PenlyIds.newId())
+                    translateRecord(record, offset.x, offset.y).copy(objectId = newId)
+                }
         val clonedObjects =
             objects
                 .filter { it.objectId in ids }
@@ -368,12 +584,21 @@ class InkCanvasState {
                     if (obj is ImageObject) {
                         images[obj.objectId]?.let { images[newId] = it }
                     }
-                    obj.withObjectId(newId)
+                    val translated =
+                        obj.withTransform(
+                            transform = obj.transform.translate(offset.x, offset.y),
+                            bounds = obj.bounds.translate(offset.x, offset.y),
+                        )
+                    translated.withObjectId(newId)
                 }
         if (clonedStrokes.isNotEmpty() || clonedObjects.isNotEmpty()) {
             val command = InsertItems(clonedStrokes, clonedObjects)
             commands.push(command)
             command.redo(this)
+
+            selectedIds = (clonedStrokes.map { it.objectId } + clonedObjects.map { it.objectId }).toSet()
+            selectionBounds = computeSelectionBounds(selectedIds)
+            bumpTick()
         }
     }
 
@@ -916,6 +1141,7 @@ class InkCanvasState {
         const val TAG: String = "InkCanvasState"
         const val SELECTION_PADDING: Float = 4f
         const val MIN_TOUCH_TARGET_PX: Float = 48f
+        const val DUPLICATE_OFFSET: Float = 24f
 
         /** Fresh empty batch per use — avoids shared mutable state. */
         fun emptyBatch() = MutableStrokeInputBatch()

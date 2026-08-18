@@ -9,6 +9,8 @@ import androidx.ink.strokes.StrokeInput
 import com.penly.core.ink.CanvasViewport
 import com.penly.core.ink.InputSanitizer
 import com.penly.core.ink.PenTool
+import com.penly.core.ink.StrokeRecord
+import com.penly.core.model.PageObject
 import kotlin.math.hypot
 
 internal class InkInputHandler(
@@ -20,6 +22,9 @@ internal class InkInputHandler(
     private var activeTool: PenTool = PenTool.ERASER
     private var strokeToolType: InputToolType = InputToolType.UNKNOWN
     private var strokeStartMillis: Long = 0L
+
+    private val erasedStrokes = mutableListOf<Pair<Int, StrokeRecord>>()
+    private val erasedObjects = mutableListOf<Pair<Int, PageObject>>()
 
     fun onDown(
         position: Offset,
@@ -42,7 +47,11 @@ internal class InkInputHandler(
                 bounds,
             )
         } else {
-            state.eraseAt(page.x, page.y, eraseRadius())
+            erasedStrokes.clear()
+            erasedObjects.clear()
+            val (strokeHit, objectHit) = state.eraseImmediately(page.x, page.y, eraseRadius())
+            strokeHit?.let { erasedStrokes += it }
+            objectHit?.let { erasedObjects += it }
         }
     }
 
@@ -60,19 +69,25 @@ internal class InkInputHandler(
                 state.addInput(strokeInput(page, elapsed, pressure), bounds)
             }
         } else {
-            state.eraseAt(page.x, page.y, eraseRadius())
+            val (strokeHit, objectHit) = state.eraseImmediately(page.x, page.y, eraseRadius())
+            strokeHit?.let { erasedStrokes += it }
+            objectHit?.let { erasedObjects += it }
         }
     }
 
     fun onUp() {
         if (activeTool.isStrokeTool) {
             state.endStroke(bounds)
+        } else {
+            state.commitEraseGesture(erasedStrokes, erasedObjects)
         }
     }
 
     fun abortStroke() {
         if (activeTool.isStrokeTool) {
             state.abortStroke()
+        } else {
+            state.abortEraseGesture(erasedStrokes, erasedObjects)
         }
     }
 

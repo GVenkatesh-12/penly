@@ -84,4 +84,31 @@ class UndoRedoStackTest {
         assertEquals("c", stack.redo())
         assertNull(stack.redo())
     }
+
+    @Test
+    fun capacityOne_operatesCorrectly() {
+        val stack = UndoRedoStack<String>(capacity = 1)
+        stack.push("first")
+        assertTrue(stack.canUndo)
+        stack.push("second")
+        assertEquals("second", stack.undo())
+        assertNull(stack.undo())
+        assertEquals("second", stack.redo())
+        assertNull(stack.redo())
+    }
+
+    @Test
+    fun interleavedUndoRedoPushes_maintainsCorrectHistory() {
+        val stack = UndoRedoStack<Int>()
+        stack.push(1)
+        stack.push(2)
+        assertEquals(2, stack.undo())
+        stack.push(3)
+        assertEquals(3, stack.undo())
+        assertEquals(1, stack.undo())
+        assertNull(stack.undo())
+        assertEquals(1, stack.redo())
+        assertEquals(3, stack.redo())
+        assertNull(stack.redo())
+    }
 }

@@ -19,6 +19,7 @@ fun fpsOverlay(
     modifier: Modifier = Modifier,
     enabled: Boolean = false,
 ) {
+    if (!enabled) return
     val fps = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(enabled) {
         if (!enabled) return@LaunchedEffect
