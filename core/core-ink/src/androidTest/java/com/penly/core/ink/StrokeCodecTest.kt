@@ -12,6 +12,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.abs
+import kotlin.math.max
 
 @RunWith(AndroidJUnit4::class)
 class StrokeCodecTest {
@@ -79,14 +81,36 @@ class StrokeCodecTest {
     }
 
     // StrokeInputBatch has no structural equals (JNI-backed, identity semantics), so compare
-    // element-wise via StrokeInput's data-class equality.
+    // element-wise. Ink's storage format stores inputs at Float16 precision, so float fields
+    // are compared with a relative tolerance (half-precision ulp is ~2^-11 of the value).
     private fun assertBatchesEqual(
         expected: StrokeInputBatch,
         actual: StrokeInputBatch,
     ) {
         assertEquals("input count", expected.size, actual.size)
         for (index in 0 until expected.size) {
-            assertEquals("input #$index", expected.get(index), actual.get(index))
+            val expectedInput = expected.get(index)
+            val actualInput = actual.get(index)
+            val message = "input #$index"
+            assertEquals("$message elapsedTimeMillis", expectedInput.elapsedTimeMillis, actualInput.elapsedTimeMillis)
+            assertEquals("$message toolType", expectedInput.toolType, actualInput.toolType)
+            assertFloatApproximatelyEqual("$message x", expectedInput.x, actualInput.x)
+            assertFloatApproximatelyEqual("$message y", expectedInput.y, actualInput.y)
+            assertFloatApproximatelyEqual("$message strokeUnitLengthCm", expectedInput.strokeUnitLengthCm, actualInput.strokeUnitLengthCm)
+            assertFloatApproximatelyEqual("$message pressure", expectedInput.pressure, actualInput.pressure)
+            assertFloatApproximatelyEqual("$message tiltRadians", expectedInput.tiltRadians, actualInput.tiltRadians)
+            assertFloatApproximatelyEqual("$message orientationRadians", expectedInput.orientationRadians, actualInput.orientationRadians)
         }
     }
+
+    private fun assertFloatApproximatelyEqual(
+        message: String,
+        expected: Float,
+        actual: Float,
+    ) {
+        val tolerance = max(1e-3f, abs(expected) * HALF_PRECISION_RELATIVE_TOLERANCE)
+        assertEquals(message, expected, actual, tolerance)
+    }
 }
+
+private const val HALF_PRECISION_RELATIVE_TOLERANCE = 0.001f
