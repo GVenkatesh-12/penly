@@ -106,9 +106,17 @@ jobs:
 
 ## 3. Emulator strategy (nightly instrumentation)
 
-GitHub-hosted runners have **no hardware virtualization**, so emulators run with software rendering:
+GitHub-hosted Linux runners expose `/dev/kvm`, but the runner user needs group
+permissions — grant them with a udev rule before launching the emulator,
+otherwise the emulator falls back to software emulation (`-accel off`) and is
+too slow to boot/respond (CI fails with "No compatible devices connected"):
 
 ```yaml
+- name: Enable KVM group permissions
+  run: |
+    echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger --name-match=kvm
 - uses: ReactiveCircus/android-emulator-runner@v2
   with:
     api-level: 34
@@ -122,6 +130,7 @@ GitHub-hosted runners have **no hardware virtualization**, so emulators run with
 Operational notes:
 
 - Use `android-emulator-runner` (handles AVD setup, waits for boot, hardware-acceleration detection).
+- The KVM udev step above is required on Linux runners — without it the action detects no accel and runs `-accel off`.
 - Add `disable-animations: true` for stable instrumentation.
 - Pick **one representative API level** for nightly runs (e.g. 34) to keep costs/times sane; per-PR instrumentation is only added when a change specifically touches platform behavior.
 - Split test classes across parallel runners if the suite grows too slow.

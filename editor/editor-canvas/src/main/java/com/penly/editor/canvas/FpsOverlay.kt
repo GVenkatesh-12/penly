@@ -17,7 +17,7 @@ import java.util.Locale
 @Composable
 fun fpsOverlay(
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
+    enabled: Boolean = false,
 ) {
     val fps = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(enabled) {
