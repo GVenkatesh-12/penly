@@ -377,8 +377,13 @@ class InkCanvasStateTest {
         state.commitResize(emptyList(), initialObjects)
 
         val resized = state.objects.first() as ImageObject
-        assertEquals(90f, resized.bounds.right, 1f)
-        assertEquals(90f, resized.bounds.bottom, 1f)
+        // selectionBounds is padded by SELECTION_PADDING (4px) on each side, so the object
+        // scales proportionally inside the padded rect: (10..50) in (6..54) -> (16.67..83.33)
+        // in (10..90) with scale 80/48.
+        assertEquals(16.667f, resized.bounds.left, 1f)
+        assertEquals(16.667f, resized.bounds.top, 1f)
+        assertEquals(83.333f, resized.bounds.right, 1f)
+        assertEquals(83.333f, resized.bounds.bottom, 1f)
 
         state.undo()
         val undone = state.objects.first() as ImageObject
@@ -387,8 +392,8 @@ class InkCanvasStateTest {
 
         state.redo()
         val redone = state.objects.first() as ImageObject
-        assertEquals(90f, redone.bounds.right, 1f)
-        assertEquals(90f, redone.bounds.bottom, 1f)
+        assertEquals(83.333f, redone.bounds.right, 1f)
+        assertEquals(83.333f, redone.bounds.bottom, 1f)
     }
 
     private fun addSampleStroke(
