@@ -28,6 +28,9 @@ import com.penly.core.model.PageObject
 import com.penly.core.model.TextObject
 import com.penly.editor.history.UndoRedoStack
 import com.penly.editor.selection.LassoPath
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Mutable editor state for the ink canvas: committed strokes, non-ink page objects (text,
@@ -159,7 +162,7 @@ class InkCanvasState {
             return
         }
         inProgressStroke = stroke
-        bounds.union(firstInput.x, firstInput.y)
+        bounds.set(firstInput.x, firstInput.y, firstInput.x, firstInput.y)
         bumpTick()
     }
 
@@ -185,11 +188,13 @@ class InkCanvasState {
         try {
             stroke.finishInput()
             stroke.updateShape()
+            val immutable = stroke.toImmutable()
+            val computedBounds = computeStrokeBounds(immutable, bounds)
             val record =
                 StrokeRecord(
                     objectId = ObjectId(PenlyIds.newId()),
-                    stroke = stroke.toImmutable(),
-                    bounds = RectF(bounds),
+                    stroke = immutable,
+                    bounds = computedBounds,
                 )
             val command = AddStroke(record)
             commands.push(command)
@@ -274,11 +279,13 @@ class InkCanvasState {
         val paint = android.graphics.Paint()
         paint.textSize = fontSize
         val width = paint.measureText(text)
+        val fm = paint.fontMetrics
+        val height = fm.descent - fm.ascent
         val now = System.currentTimeMillis()
         val objectText =
             TextObject(
                 objectId = ObjectId(PenlyIds.newId()),
-                bounds = Rect(at.x, at.y, at.x + width, at.y + fontSize),
+                bounds = Rect(at.x, at.y, at.x + width, at.y + height),
                 createdAtMillis = now,
                 updatedAtMillis = now,
                 text = text,
@@ -568,7 +575,7 @@ class InkCanvasState {
     }
 
     /**
-     * Direct selection: selects a single object (image/text) at the
+     * Direct selection: selects a single object (image/text/stroke) at the
      * given page position. Returns the object id if hit, null if
      * nothing was hit.
      */
@@ -576,15 +583,63 @@ class InkCanvasState {
         pageX: Float,
         pageY: Float,
     ): ObjectId? {
-        // Iterate in reverse paint order so topmost object wins.
-        val hit =
+        val touchSlop = (MIN_TOUCH_TARGET_PX / 2f) / viewport.scale
+        // 1. Check topmost PageObject (Text, Image) with touch padding
+        val hitObj =
             objects.lastOrNull { obj ->
-                obj.bounds.contains(pageX, pageY)
-            } ?: return null
-        selectedIds = setOf(hit.objectId)
-        selectionBounds = computeSelectionBounds(selectedIds)
-        bumpTick()
-        return hit.objectId
+                val b = obj.bounds
+                val expanded =
+                    Rect(
+                        b.left - touchSlop,
+                        b.top - touchSlop,
+                        b.right + touchSlop,
+                        b.bottom + touchSlop,
+                    )
+                expanded.contains(pageX, pageY)
+            }
+        if (hitObj != null) {
+            selectedIds = setOf(hitObj.objectId)
+            selectionBounds = computeSelectionBounds(selectedIds)
+            bumpTick()
+            return hitObj.objectId
+        }
+
+        // 2. Check strokes in reverse paint order
+        val tapPt = Point(pageX, pageY)
+        for (index in strokes.indices.reversed()) {
+            val record = strokes[index]
+            val b = record.bounds
+            if (
+                pageX < b.left - touchSlop ||
+                pageX > b.right + touchSlop ||
+                pageY < b.top - touchSlop ||
+                pageY > b.bottom + touchSlop
+            ) {
+                continue
+            }
+            var hit = false
+            var prev: Point? = null
+            for (i in 0 until record.stroke.inputs.size) {
+                val input = record.stroke.inputs.get(i)
+                val pt = record.transform.apply(Point(input.x, input.y))
+                if (distance(tapPt, pt) <= touchSlop) {
+                    hit = true
+                    break
+                }
+                if (prev != null && distanceToSegment(tapPt, prev, pt) <= touchSlop) {
+                    hit = true
+                    break
+                }
+                prev = pt
+            }
+            if (hit) {
+                selectedIds = setOf(record.objectId)
+                selectionBounds = computeSelectionBounds(selectedIds)
+                bumpTick()
+                return record.objectId
+            }
+        }
+        return null
     }
 
     /** True when the screen point lies inside the current selection bounds (page space). */
@@ -593,37 +648,46 @@ class InkCanvasState {
         screenY: Float,
     ): Boolean {
         val bounds = selectionBounds ?: return false
-        return bounds.contains(viewport.screenToPageX(screenX), viewport.screenToPageY(screenY))
+        val pageX = viewport.screenToPageX(screenX)
+        val pageY = viewport.screenToPageY(screenY)
+        val minHalfSize = (MIN_TOUCH_TARGET_PX / 2f) / viewport.scale
+        val hitLeft = min(bounds.left, bounds.center.x - minHalfSize)
+        val hitTop = min(bounds.top, bounds.center.y - minHalfSize)
+        val hitRight = max(bounds.right, bounds.center.x + minHalfSize)
+        val hitBottom = max(bounds.bottom, bounds.center.y + minHalfSize)
+        val hitRect = Rect(hitLeft, hitTop, hitRight, hitBottom)
+        return hitRect.contains(pageX, pageY)
     }
 
     private fun computeSelectionBounds(ids: Set<ObjectId>): Rect? {
-        var union: Rect? = null
+        if (ids.isEmpty()) return null
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        var hasItem = false
         for (record in strokes) {
             if (record.objectId !in ids) continue
             val bounds = record.bounds
-            union =
-                union?.union(
-                    Rect(
-                        bounds.left,
-                        bounds.top,
-                        bounds.right,
-                        bounds.bottom,
-                    ),
-                ) ?: Rect(
-                    bounds.left,
-                    bounds.top,
-                    bounds.right,
-                    bounds.bottom,
-                )
+            minX = min(minX, bounds.left)
+            minY = min(minY, bounds.top)
+            maxX = max(maxX, bounds.right)
+            maxY = max(maxY, bounds.bottom)
+            hasItem = true
         }
         for (obj in objects) {
-            if (obj.objectId in ids) {
-                union = union?.union(obj.bounds) ?: obj.bounds
-            }
+            if (obj.objectId !in ids) continue
+            val bounds = obj.bounds
+            minX = min(minX, bounds.left)
+            minY = min(minY, bounds.top)
+            maxX = max(maxX, bounds.right)
+            maxY = max(maxY, bounds.bottom)
+            hasItem = true
         }
+        if (!hasItem) return null
         // Pad the selection bounds so stroke rendering overshoot
         // doesn't visually overflow the selection rect.
-        return union?.inset(-SELECTION_PADDING)
+        return Rect(minX, minY, maxX, maxY).inset(-SELECTION_PADDING)
     }
 
     private fun clearSelection() {
@@ -851,8 +915,48 @@ class InkCanvasState {
     private companion object {
         const val TAG: String = "InkCanvasState"
         const val SELECTION_PADDING: Float = 4f
+        const val MIN_TOUCH_TARGET_PX: Float = 48f
 
         /** Fresh empty batch per use — avoids shared mutable state. */
         fun emptyBatch() = MutableStrokeInputBatch()
     }
+}
+
+private fun computeStrokeBounds(
+    stroke: androidx.ink.strokes.Stroke,
+    fallback: RectF,
+): RectF {
+    if (stroke.inputs.size == 0) return RectF(fallback)
+    var minX = Float.POSITIVE_INFINITY
+    var minY = Float.POSITIVE_INFINITY
+    var maxX = Float.NEGATIVE_INFINITY
+    var maxY = Float.NEGATIVE_INFINITY
+    for (i in 0 until stroke.inputs.size) {
+        val input = stroke.inputs.get(i)
+        if (input.x < minX) minX = input.x
+        if (input.x > maxX) maxX = input.x
+        if (input.y < minY) minY = input.y
+        if (input.y > maxY) maxY = input.y
+    }
+    return RectF(minX, minY, maxX, maxY)
+}
+
+private fun distance(
+    p1: Point,
+    p2: Point,
+): Float = hypot((p1.x - p2.x).toDouble(), (p1.y - p2.y).toDouble()).toFloat()
+
+private fun distanceToSegment(
+    p: Point,
+    a: Point,
+    b: Point,
+): Float {
+    val dx = b.x - a.x
+    val dy = b.y - a.y
+    val lengthSq = dx * dx + dy * dy
+    if (lengthSq == 0f) return distance(p, a)
+    val t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq).coerceIn(0f, 1f)
+    val projX = a.x + t * dx
+    val projY = a.y + t * dy
+    return distance(p, Point(projX, projY))
 }

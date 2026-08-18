@@ -4,6 +4,7 @@ import android.graphics.DashPathEffect
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.RectF
 import android.util.Log
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -29,7 +30,6 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import android.graphics.Canvas as NativeCanvas
-import android.graphics.Rect as AndroidRect
 
 @Composable
 fun rememberInkCanvasState(): InkCanvasState = remember { InkCanvasState() }
@@ -62,45 +62,35 @@ fun inkCanvas(
             state.currentTick
             drawIntoCanvas { canvas ->
                 val nativeCanvas = canvas.nativeCanvas
-                nativeCanvas.save()
-                nativeCanvas.concat(matrix)
                 try {
                     for (record in state.strokes) {
-                        if (record.transform == Transform.IDENTITY) {
-                            renderer.draw(
-                                nativeCanvas,
-                                record.stroke,
-                                matrix,
-                            )
-                        } else {
-                            val composed =
-                                composeTransform(
-                                    matrix,
-                                    record.transform,
-                                )
-                            val objMatrix =
-                                transformToMatrix(record.transform)
-                            nativeCanvas.save()
-                            nativeCanvas.concat(objMatrix)
-                            renderer.draw(
-                                nativeCanvas,
-                                record.stroke,
-                                composed,
-                            )
-                            nativeCanvas.restore()
-                        }
+                        val strokeMatrix =
+                            if (record.transform == Transform.IDENTITY) {
+                                matrix
+                            } else {
+                                composeTransform(matrix, record.transform)
+                            }
+                        renderer.draw(
+                            nativeCanvas,
+                            record.stroke,
+                            strokeMatrix,
+                        )
                     }
                     state.inProgressStroke?.let { stroke ->
                         renderer.draw(nativeCanvas, stroke, matrix)
                     }
-                    for (obj in state.objects) {
-                        drawObject(nativeCanvas, state, obj)
+                    nativeCanvas.save()
+                    nativeCanvas.concat(matrix)
+                    try {
+                        for (obj in state.objects) {
+                            drawObject(nativeCanvas, state, obj)
+                        }
+                        drawLassoOverlay(nativeCanvas, state)
+                    } finally {
+                        nativeCanvas.restore()
                     }
-                    drawLassoOverlay(nativeCanvas, state)
                 } catch (exception: RuntimeException) {
                     Log.w(TAG, "page rendering failed", exception)
-                } finally {
-                    nativeCanvas.restore()
                 }
                 drawSelectionBounds(nativeCanvas, state)
             }
@@ -179,8 +169,8 @@ private val TEXT_PAINT =
         isAntiAlias = true
     }
 
-private const val HANDLE_RADIUS: Float = 7f
-private const val HANDLE_TOUCH_RADIUS_PX: Float = 40f
+private const val HANDLE_RADIUS: Float = 10f
+private const val HANDLE_TOUCH_RADIUS_PX: Float = 64f
 private const val MIN_SELECTION_SIZE: Float = 20f
 
 // ------ Transform helpers ------
@@ -240,11 +230,11 @@ private fun drawObject(
             val bounds = obj.bounds
             if (bitmap != null) {
                 val rect =
-                    AndroidRect(
-                        bounds.left.toInt(),
-                        bounds.top.toInt(),
-                        bounds.right.toInt(),
-                        bounds.bottom.toInt(),
+                    RectF(
+                        bounds.left,
+                        bounds.top,
+                        bounds.right,
+                        bounds.bottom,
                     )
                 nativeCanvas.drawBitmap(bitmap, null, rect, null)
             } else {
@@ -523,6 +513,10 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
             }
         }
 
+    if (mode is SelectionGestureMode.Lasso) {
+        state.addLassoPoint(downPos.x, downPos.y)
+    }
+
     var centroid = downPos
     var span = 0f
     var lastPageX = downPage.x
@@ -625,6 +619,10 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
         if (event.changes.none { it.pressed }) {
             break
         }
+    }
+    if (wasMultiTouch) {
+        state.lassoPoints = emptyList()
+        return
     }
     val elapsed = System.currentTimeMillis() - downTime
     val isTap = maxDist < TAP_SLOP && elapsed < TAP_TIMEOUT
