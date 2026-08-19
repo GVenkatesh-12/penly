@@ -31,6 +31,8 @@ jobs:
         run: ./gradlew lintDebug
       - name: Unit tests
         run: ./gradlew testDebugUnitTest
+      - name: Compile instrumentation tests
+        run: ./gradlew compileDebugAndroidTestKotlin
       - name: Serialization + migration tests
         run: ./gradlew :core:core-document:test :core:core-database:test
       - name: Upload test reports

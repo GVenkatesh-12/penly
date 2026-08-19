@@ -30,7 +30,14 @@ subprojects {
     }
 }
 
-listOf("ktlintCheck", "detekt", "lintDebug", "testDebugUnitTest", "assembleDebug").forEach { taskName ->
+listOf(
+    "ktlintCheck",
+    "detekt",
+    "lintDebug",
+    "testDebugUnitTest",
+    "compileDebugAndroidTestKotlin",
+    "assembleDebug",
+).forEach { taskName ->
     tasks.register(taskName) {
         dependsOn(subprojects.filter { it.buildFile.exists() }.map { "${it.path}:$taskName" })
         description = "Runs $taskName in every module."

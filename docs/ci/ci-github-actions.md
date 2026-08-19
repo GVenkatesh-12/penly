@@ -23,6 +23,7 @@ format check (ktlint)
 lint (Android lint)
 static analysis (detekt)
 unit tests
+compile instrumentation tests (androidTest sources — catches missing imports before nightly)
 serialization tests
 migration tests
 build debug APK
