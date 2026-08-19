@@ -9,6 +9,7 @@ import com.penly.core.common.PenlyIds
 import com.penly.core.geometry.Point
 import com.penly.core.geometry.Rect
 import com.penly.core.ink.PenTool
+import com.penly.core.ink.StrokeRecord
 import com.penly.core.model.ImageObject
 import com.penly.core.model.ObjectId
 import com.penly.core.model.TextObject
