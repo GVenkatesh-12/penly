@@ -48,12 +48,13 @@ Rules:
 2. Experimental dependencies must be isolated behind an interface/adapter.
 3. Every dependency needs an owner module and a reason to exist.
 4. Prefer official AndroidX/Kotlin libraries for foundational platform behavior.
-5. Do not add a library for functionality requiring fewer than roughly 100 lines of clear, well-tested code unless it solves a difficult platform compatibility problem.
-6. Pin versions centrally.
-7. Use dependency locking/verification where practical.
-8. Review release notes before upgrades.
-9. Upgrade one foundation family at a time when possible.
-10. Every persistence dependency upgrade must run migration and recovery tests.
+5. Do not build from scratch what a stable, maintained library already provides: if a module or library fits the workflow, use it. In-house implementation is justified only for core differentiators (ink pipeline, document format) or when no stable fit exists. The default bias is reuse, not reinvention (complements rule 6, the 100-line floor).
+6. Do not add a library for functionality that requires fewer than roughly 100 lines of clear, well-tested code unless it solves a difficult platform compatibility problem.
+7. Pin versions centrally.
+8. Use dependency locking/verification where practical.
+9. Review release notes before upgrades.
+10. Upgrade one foundation family at a time when possible.
+11. Every persistence dependency upgrade must run migration and recovery tests.
 
 Never bump versions ad hoc in module build files. Dependency updates arrive as reviewed PRs (Renovate/Dependabot), never unattended.
 

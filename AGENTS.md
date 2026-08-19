@@ -37,6 +37,8 @@ export JAVA_HOME=~/jdk/jdk-21.0.12+8
 ./gradlew check        # Phase-0 gate: all subproject checks (unit tests, lint, ktlint, detekt)
 ./gradlew :app:assembleDebug   # APK
 ./gradlew projects     # list modules
+# Instrumented workflow/UX suites need a device/emulator (local machine too weak):
+./gradlew connectedDebugAndroidTest   # runs on CI (API-34 emulator job) per push
 ```
 
 First run downloads all dependencies — allow 10–20+ min. Configuration-cache
@@ -82,6 +84,10 @@ versionName `0.1.0-alpha.1`.
   `.github/workflows/` (Phase 0 remaining work).
 - Commit style: imperative, concise, matching history (`docs: ...`, `build: ...`).
   Push to `origin main` after each green step.
+- Dependency doctrine: reuse over reinvent — prefer a stable, verified library
+  that fits the workflow over building the same capability in-house
+  ([plan §5](docs/plan.md#5-dependency-policy)); in-house code only for core
+  differentiators.
 
 ## Current state (Phase 1–4 — Ink Lab, objects, storage, crash safety)
 
@@ -136,6 +142,12 @@ Phase 4 implemented so far, `./gradlew check` green locally:
   `crashAfter` sweep through every save mutation + per-stage crash tests +
   journal-residue/corruption cases); `FileContentStoreTest` asserts no temp
   files survive.
+- Workflow/UX suites (instrumented, run in CI on an API-34 emulator):
+  `InkInputHandlerTest` (gesture layer), `EditorWorkflowUiTest` (draw/erase/
+  undo/dialogs/selection/pinch flows against an in-memory `PenlyStore`),
+  `PersistenceLifecycleUiTest` (process-death reopen on `MainActivity`),
+  `RecoveryBannerUiTest` (journal-residue UX); `PenlyStoreWorkflowTest` is
+  JVM and runs in `./gradlew check`.
 
 ktlint quirks (learned the hard way): dot-chains containing a mid-chain call
 must wrap every link — `json` alone on its line, `.encodeToString(...)` on the

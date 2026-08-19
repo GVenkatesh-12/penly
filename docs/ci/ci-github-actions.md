@@ -12,7 +12,7 @@ Three workflows under `.github/workflows/`:
 
 | Workflow | File | Trigger | Purpose |
 |---|---|---|---|
-| CI (PR checks) | `ci.yml` | every push / PR | fast feedback: format, lint, static analysis, unit + serialization + migration tests, debug APK |
+| CI (PR checks) | `ci.yml` | every push / PR | fast feedback: format, lint, static analysis, unit + serialization + migration tests, debug APK, instrumented workflow tests on emulator |
 | Nightly | `nightly.yml` | scheduled (`cron`), manual dispatch | heavy verification: instrumentation on emulator, large-document tests, fuzz corpus |
 | Release | `release.yml` | tag push or manual dispatch | release build, signing, install/update verification, GitHub Release |
 
@@ -23,10 +23,11 @@ format check (ktlint)
 lint (Android lint)
 static analysis (detekt)
 unit tests
-compile instrumentation tests (androidTest sources — catches missing imports before nightly)
+compile instrumentation tests (androidTest sources — catches missing imports)
 serialization tests
 migration tests
 build debug APK
+instrumentation tests (emulator, API 34): workflow + recovery + persistence suites
 ```
 
 Exit criterion: `./gradlew check` passes on a clean runner ([plan §55, Phase 0](../plan.md#phase-0--repository-foundation)).
@@ -86,6 +87,32 @@ jobs:
       - name: Serialization + migration tests
         run: ./gradlew :core-document:test :core-database:test
 
+  instrumentation:
+    name: Instrumentation (API 34)
+    runs-on: ubuntu-latest
+    needs: checks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM group permissions
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Instrumentation tests
+        uses: ReactiveCircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_7
+          disable-animations: true
+          force-avd-creation: false
+          script: ./gradlew connectedDebugAndroidTest
+
   build:
     name: Build debug APK
     runs-on: ubuntu-latest
@@ -105,7 +132,7 @@ jobs:
           path: app/build/outputs/apk/debug/*.apk
 ```
 
-## 3. Emulator strategy (nightly instrumentation)
+## 3. Emulator strategy (instrumentation)
 
 GitHub-hosted Linux runners expose `/dev/kvm`, but the runner user needs group
 permissions — grant them with a udev rule before launching the emulator,
@@ -133,7 +160,7 @@ Operational notes:
 - Use `android-emulator-runner` (handles AVD setup, waits for boot, hardware-acceleration detection).
 - The KVM udev step above is required on Linux runners — without it the action detects no accel and runs `-accel off`.
 - Add `disable-animations: true` for stable instrumentation.
-- Pick **one representative API level** for nightly runs (e.g. 34) to keep costs/times sane; per-PR instrumentation is only added when a change specifically touches platform behavior.
+- Pick **one representative API level** (34) for instrumentation on every push/PR; keep the suite focused on workflow/recovery/persistence tests so per-PR emulator time stays reasonable.
 - Split test classes across parallel runners if the suite grows too slow.
 
 ### Macrobenchmarks on emulators — caveat
