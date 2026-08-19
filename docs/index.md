@@ -27,7 +27,13 @@ Welcome to the Penly documentation. The master plan (`docs/plan.md`) is the **so
 | [editor-state-model.md](architecture/editor-state-model.md) | Editor coordinator, command-based undo/redo, viewport, spatial index, selection |
 | [storage-recovery.md](architecture/storage-recovery.md) | Room schema, ContentStore, journal/autosave/crash recovery, save semantics, file integrity |
 | [performance.md](architecture/performance.md) | Performance budget, benchmark corpus, benchmarking strategy, banned anti-patterns |
-| [adr/](architecture/adr/) | Architecture Decision Records (ADR-001 … ADR-012) |
+| [adr/](architecture/adr/) | Architecture Decision Records (ADR-001 … ADR-019) |
+
+### Features
+
+| Document | Purpose |
+|---|---|
+| [feature-matrix.md](features/feature-matrix.md) | Complete-product feature-parity benchmark (Tier A–D), mapped to phases (ADR-019) |
 
 ### Document format
 

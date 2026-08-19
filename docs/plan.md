@@ -33,6 +33,12 @@ Everything else must protect that experience.
 8. **Stable dependencies first.** Prefer stable AndroidX APIs for core paths; experimental APIs are isolated behind adapters.
 9. **Modular architecture.** Core document, ink, storage and rendering code must not depend on Compose UI.
 10. **Future-compatible.** v0.1 must provide stable seams for PDF, OCR, semantic search, sync, AI and desktop ports.
+11. **Extensible by default.** The plugin SDK is a first-class citizen; API stability is a promise.
+12. **AI is optional, never required.** Writing never requires an account, a model download, or a cloud call.
+13. **Every capability is an interface.** AI, sync, OCR, search and plugins are provider-abstracted so no vendor can lock the product.
+14. **Open format + interop.** The native `.penly` format plus lossless Markdown/PDF export; import from mainstream note apps.
+15. **Your data, your servers.** Self-hostable sync with end-to-end encryption; the official cloud is optional, never mandatory.
+16. **Plugin sandboxing is security.** Third-party code never touches notes without explicit, user-granted capabilities.
 
 ---
 
@@ -2001,6 +2007,181 @@ No critical performance regression against defined budgets.
 
 ---
 
+## Phase 8 — PDF Annotation
+
+### Tasks
+
+- PDF import
+- annotation layer (ink/shapes/text over PDF)
+- annotation object model (non-destructive: original bytes + annotation objects)
+- merged PDF export
+- page-to-page annotation mapping
+
+### Exit criteria
+
+A 100-page PDF can be annotated, reloaded, and exported with annotations
+losslessly; the original PDF bytes are unchanged.
+
+---
+
+## Phase 9 — Search + On-Device OCR
+
+### Tasks
+
+- FTS5 full-text index
+- handwriting OCR provider (on-device)
+- image OCR
+- search UI + indexed highlights
+- ink-to-text conversion for selected handwriting
+
+### Exit criteria
+
+"Search your handwriting" finds strokes across notebooks on three representative
+devices, fully offline.
+
+---
+
+## Phase 10 — Kotlin Multiplatform Core + Desktop
+
+### Tasks
+
+- split every platform-free `core:*` module into KMP (`commonMain` /
+  `androidMain` / `desktopMain`)
+- Compose Multiplatform app shell
+- Skiko/Skia ink renderer and authoring backend (mouse + pen-tablet pressure)
+- desktop input (keyboard, mouse, pen)
+- multi-window, system tray, global shortcuts
+- native file dialogs, drag-drop import
+
+### Exit criteria
+
+The same document opens identically on Android and a desktop OS; ink authored
+on one platform renders and edits correctly on the other.
+
+---
+
+## Phase 11 — Knowledge Layer
+
+### Tasks
+
+- rich typed blocks (headings, lists, checkboxes, code, tables, callouts)
+- Markdown + wiki-links + backlinks
+- tags + tag manager
+- graph view (local + global)
+- outline, daily notes, journal
+- templates system
+- quick switcher (⌘K)
+
+### Exit criteria
+
+Obsidian-style knowledge-management flows work on both Android and desktop.
+
+---
+
+## Phase 12 — Browser + Audio
+
+### Tasks
+
+- share-intent web clipper
+- reader-mode extraction (HTML → Markdown / reader snapshot)
+- live web embeds (WebView on Android, embedded Chromium on desktop, external
+  browser fallback)
+- link previews
+- audio recording linked to writing position
+
+### Exit criteria
+
+A web page can be clipped and reopened as a note; a lecture can be recorded
+while writing with position-linked playback.
+
+---
+
+## Phase 13 — Plugins
+
+### Tasks
+
+- QuickJS sandboxed runtime
+- `penly-sdk` v1 JS API contract (versioned, deterministic)
+- capability model (notes read/write, commands, custom views, network, AI)
+- signed plugin bundles + verification
+- plugin lifecycle (install/update/disable/uninstall)
+- compatibility test suite
+
+### Exit criteria
+
+A third-party plugin installs, runs sandboxed, and uninstalls cleanly; a plugin
+written against `penly-sdk` v1 passes the compatibility suite on Android and
+desktop.
+
+---
+
+## Phase 14 — Sync
+
+### Tasks
+
+- operation log as the sync seam
+- WebDAV transport (universal self-host)
+- S3-compatible transport
+- E2EE (XChaCha20-Poly1305, Argon2id-derived keys, encrypted metadata)
+- conflict copies + resolution UI
+- background sync (WorkManager / desktop service)
+
+### Exit criteria
+
+Two devices converge without data loss; a kill-one-device fault-injection test
+shows no committed content lost; a passphrase-protected vault cannot be read
+server-side.
+
+---
+
+## Phase 15 — AI + Agents
+
+### Tasks
+
+- on-device providers: embeddings, handwriting recognition, OCR, small LLM
+  (ONNX/NNAPI, opt-in downloads)
+- BYOK provider (OpenRouter gateway)
+- assistant panel in the editor
+- agent framework: tool-calling agents with note tools (search, read,
+  create/update, selection-transform, browse URL)
+- plugin-registered agent tools
+- semantic search (on-device embeddings + hybrid FTS5)
+
+### Exit criteria
+
+An agent can find, summarize, and edit notes from a natural-language command
+on-device and via a user-provided cloud key; no AI feature requires an account.
+
+---
+
+## Phase 16 — Transcription
+
+### Tasks
+
+- audio → text transcription
+- position-linked transcripts
+- transcript search
+
+### Exit criteria
+
+A recorded lecture is transcribed, position-linked, and searchable.
+
+---
+
+## Phase 17 — Collaboration
+
+### Tasks
+
+- CRDT document sync
+- comments and mentions
+- share links
+
+### Exit criteria
+
+Two users edit the same page live without loss or visible conflict artifacts.
+
+---
+
 # 56. Issue Priority System
 
 Use:
@@ -2126,35 +2307,13 @@ The user should encounter the pen experience within seconds.
 
 # 60. Future Roadmap Compatibility
 
-v0.1 should leave clear seams for:
+v0.1 must leave clear seams for the complete-product roadmap. The authoritative
+master roadmap (Phases 8–17: PDF annotation, search/OCR, KMP + desktop,
+knowledge layer, browser/audio, plugins, sync, AI/agents, collaboration) is
+defined in [Part II — The Master Plan](#part-ii--the-master-plan).
 
-```text
-v0.2
-├── PDF annotation
-├── richer shape tools
-├── improved selection
-└── handwriting OCR
-
-v0.3
-├── full search
-├── tagging
-├── advanced export
-└── audio-linked notes
-
-v0.4
-├── optional sync
-├── WebDAV/self-hosting
-└── revision history
-
-v0.5+
-├── AI assistant
-├── semantic search
-├── equation recognition
-├── desktop client
-└── collaboration
-```
-
-The exact versioning can change. The important part is that none of these should require replacing the foundational document model.
+The exact versioning can change. The important part is that none of these
+should require replacing the foundational document model.
 
 ---
 
@@ -2183,6 +2342,13 @@ ADR-009 Stable IDs for persisted entities
 ADR-010 Modular architecture
 ADR-011 No mandatory cloud account
 ADR-012 Experimental dependency isolation
+ADR-013 Kotlin Multiplatform core (Android + Desktop)
+ADR-014 Sandboxed QuickJS plugin runtime
+ADR-015 Sync protocol + E2EE
+ADR-016 AI provider abstraction (on-device + BYOK)
+ADR-017 Desktop ink via Skiko
+ADR-018 Plugin security/capability model
+ADR-019 Feature-parity matrix
 ```
 
 This prevents future contributors from accidentally undoing important architectural decisions.
@@ -2502,3 +2668,219 @@ Do not hard-code these versions throughout the repository. Use the version catal
 The project succeeds at v0.1 if a user can open it on a good Android tablet, create a page, write naturally for several minutes, edit the handwriting, close the application, reopen it later, and find the exact page intact — while the application remains visually polished, responsive and reliable.
 
 Everything else is built on top of that foundation.
+
+---
+
+# Part II — The Master Plan
+
+> Status: approved August 2026. Extends the v0.1 plan with the complete-product
+> roadmap: cross-platform desktop, plugins, sync, AI/agents, and browser
+> features. The v0.1 plan remains authoritative for Phases 0–7; Part II governs
+> everything after v1.0. Part II's decisions are recorded in ADR-013 through
+> ADR-019.
+
+# 73. Master Plan — Product Vision
+
+The master thesis builds on, but does not replace, the v0.1 thesis:
+
+> Penly is the **open note platform** — handwriting-first, local-first, with a
+> plugin ecosystem, native AI, and self-hostable sync — where notes remain the
+> user's forever: open format, no lock-in, offline-capable, and running on
+> desktop and Android.
+
+The v0.1 promise ("open a page, write naturally with no friction") stays the
+product's center. Everything in Part II must protect that experience, in
+accordance with principles 11–16 (§1).
+
+Decisions locked with the user (August 2026):
+
+```text
+platform    Android + Desktop (Kotlin Multiplatform core, Compose Multiplatform)
+plugins     sandboxed JS runtime (QuickJS), penly-sdk, signed marketplace later
+AI/agents   hybrid: on-device first (ONNX/NNAPI), BYOK cloud (OpenRouter),
+            provider-abstracted, never required
+browser     web clipper + in-app reader + live embeds + link previews (no full
+            browser engine)
+sync        self-hostable first (WebDAV/S3) with E2EE; official cloud optional
+priority    handwriting tier first, knowledge-management tier second
+```
+
+---
+
+# 74. Feature Matrix
+
+The complete-product benchmark, detailed in
+[`docs/features/feature-matrix.md`](features/feature-matrix.md):
+
+```text
+Tier A — Handwriting (GoodNotes/Samsung Notes/OneNote parity)
+  PDF import + non-destructive annotation + merged export
+  handwriting search (on-device OCR)
+  ink-to-text conversion
+  shape recognition
+  audio recording linked to writing position
+  three erasers (stroke, pixel, lasso)
+  zoom magnifier + optional infinite canvas
+  paper templates (ruled/grid/dots/music/engineering/planner)
+  palm rejection + stylus button tools
+
+Tier B — Knowledge (Obsidian/Notion/Logseq parity)
+  rich typed blocks (headings, lists, checkboxes, code, tables, callouts)
+  Markdown + wiki-links + backlinks + tags + outline
+  graph view (local + global)
+  daily notes/journal + templates
+  quick switcher (⌘K) + full-text search
+  attachments + file management
+  databases/collections (later)
+
+Tier C — Platform (differentiators)
+  desktop + Android (KMP core, Compose Multiplatform)
+  plugins: sandboxed JS runtime, SDK, capability model, signed marketplace
+  AI: on-device OCR/embeddings/handwriting recognition; BYOK assistant;
+      tool-calling agents over notes
+  browser: web clipper + reader + live embeds + link previews
+  sync: self-host (WebDAV/S3), E2EE, optional official cloud
+  audio notes with transcription
+  version history/snapshots; backup/restore
+
+Tier D — Future (v5+)
+  real-time collaboration (CRDT), comments/mentions, share links
+```
+
+Anti-goals (unchanged from §3, plus): not a full word processor, not a full
+browser engine, no mandatory account/telemetry, no cloud-first storage.
+
+---
+
+# 75. Master-Plan Architecture Strategy
+
+## 75.1 Kotlin Multiplatform core (Android + Desktop)
+
+- Every platform-free `core:*` module becomes KMP: `commonMain` +
+  `androidMain` + `desktopMain` (core-model, core-geometry, core-document,
+  core-ink, core-search, core-export, core-sync, core-ai, core-plugin,
+  core-crypto).
+- The existing "core never imports Compose/Activity/ViewModel" rule (§6) is the
+  precondition that makes this cheap — it is already satisfied.
+- AndroidX Ink remains the Android ink engine behind `InkAdapter`. Desktop ink
+  uses a Skiko/Skia backend (render + author with mouse and pen-tablet
+  pressure). The persisted stroke format is platform-neutral and unchanged.
+- Desktop shell: Compose Multiplatform — multi-window, system tray, global
+  shortcuts, native dialogs, drag-drop import.
+
+## 75.2 Plugin runtime — sandboxed QuickJS
+
+- `core-plugin`: manifest, versioned `penly-sdk` JS API, QuickJS host,
+  capability model, async JSON bridge, event hooks.
+- Security: no direct filesystem/network access without capability, memory and
+  execution time limits, signed bundles, deterministic API versioning.
+- Marketplace (curated index → signed community registry) is Phase 13+, not
+  v1.0.
+
+## 75.3 AI + agents — hybrid, provider-abstracted
+
+- `core-ai` exposes `AiProvider` (already planned in §34): recognizeHandwriting,
+  embed, chat, summarize, transcribe, solveEquation, extract.
+- Local providers (`platform-llm`, ONNX/NNAPI) with opt-in model downloads and
+  size budgets; BYOK provider via OpenRouter gateway. No AI feature requires an
+  account.
+- `core-agent`: tool-calling agents with note tools (search, read,
+  create/update, selection-transform, record/transcribe, browse URL), callable
+  from assistant panel, selection menus, and slash commands; plugins can
+  register tools.
+- Semantic search: on-device embeddings, hybrid with FTS5.
+
+## 75.4 Browser — clipper + reader + embeds
+
+- `core-browser`: share-intent web clipper (reader-mode extraction to
+  Markdown/reader snapshot), live in-page embeds (WebView on Android, embedded
+  Chromium on desktop, external-browser fallback), link previews.
+
+## 75.5 Sync — self-host first, E2EE
+
+- The operation log (§33) is the sync seam. `core-sync` transports: WebDAV
+  first (universal self-host), S3-compatible second, official server third.
+- E2EE: client-side XChaCha20-Poly1305, Argon2id-derived keys, encrypted blobs
+  and metadata.
+- Conflicts: last-writer-wins + explicit conflict copies first; CRDT for ink
+  strokes in the collaboration phase.
+
+## 75.6 Module graph additions
+
+```text
+core:      +core-ai +core-agent +core-sync +core-plugin +core-crypto
+           +core-browser +core-audio +core-knowledge
+platform:  +platform-desktop +platform-llm +platform-plugin-host
+           +platform-crypto
+feature:   +feature-knowledge +feature-ai +feature-sync +feature-plugins
+           +feature-browser
+```
+
+Existing empty scaffolds (`core-search`, `core-pdf`, `core-export`,
+`core-settings`, `core-telemetry`, `feature-home`, `feature-notebook`,
+`feature-settings`) receive their first real code in the phases below.
+
+---
+
+# 76. Master Roadmap (Phases 8–17)
+
+Phases 0–7 (defined in §55) are unchanged and must complete before Phase 8
+starts. Each phase is independently shippable and ends with `./gradlew check`
+green.
+
+```text
+Phase 8   PDF annotation                  → v1.1
+Phase 9   Search + on-device OCR          → v1.2
+Phase 10  Kotlin Multiplatform + Desktop  → v2.0
+Phase 11  Knowledge layer                 → v2.1
+Phase 12  Browser + audio                 → v2.2
+Phase 13  Plugins (QuickJS + penly-sdk)   → v3.0
+Phase 14  Sync (WebDAV/S3, E2EE)          → v3.1
+Phase 15  AI + agents                     → v4.0
+Phase 16  Transcription                   → v4.1
+Phase 17  Collaboration (CRDT)            → v5.0
+```
+
+Ordering rationale: v1.0 ships before any expansion (§3's "everything app"
+trap). Plugins precede sync because the ecosystem drives adoption (Obsidian's
+lesson); sync precedes AI because multi-device trust comes first. The operation
+log keeps sync/collaboration/version history future-proof without building them
+early. Full per-phase task lists and exit criteria are in §55 (Phases 8–17).
+
+---
+
+# 77. Master-Plan Risks
+
+```text
+risk                                    mitigation
+AndroidX Ink is Android-only            InkAdapter boundary; Skiko desktop
+                                        backend shares the same format (Ph. 10)
+KMP migration cost                      core is already Compose-free; migrate
+                                        module-by-module, Android green always
+QuickJS sandbox escape                  capability model, no raw FS/net,
+                                        signed bundles, fuzzed bridge,
+                                        time/memory limits
+on-device AI model size                 opt-in downloads, size budgets,
+                                        hardware acceleration, BYOK fallback
+solo-dev pace on a weak machine         vertical-slice phases with CI gates;
+                                        nightly emulator + KVM working
+sync data-loss (worst case)             E2EE + operation log + conflict copies
+                                        + fault-injection tests before release
+plugin API breakage kills ecosystem     penly-sdk v1 locked in Phase 13 with a
+                                        compatibility test suite
+```
+
+---
+
+# 78. Master-Plan Documentation
+
+Docs required by the master plan (beyond §62):
+
+```text
+features/feature-matrix.md    — Tier A–D parity benchmark (written, Phase 0)
+architecture/adr/ADR-013..019 — decisions locked in Part II (written)
+plugin-sdk.md                 — penly-sdk v1 API contract (with Phase 13)
+sync-protocol.md              — transports, E2EE, conflict policy (with Phase 14)
+ai-providers.md               — provider interfaces, local + BYOK (with Phase 15)
+```
+

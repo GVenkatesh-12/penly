@@ -4,7 +4,7 @@
 
 This is the single most important rule in Penly. It enables testability without Android UI, future desktop/iOS/KMP work, and keeps performance-critical code free of UI framework concerns.
 
-Source of truth: [plan.md §6–7, §41–42, §68](../plan.md#6-architecture).
+Source of truth: [plan.md §6–7, §41–42, §68](../plan.md#6-architecture); master-plan extensions in [plan.md §75](../plan.md#75-master-plan-architecture-strategy) and ADR-013..019.
 
 ---
 
@@ -58,12 +58,25 @@ core/
   core-pdf/
   core-settings/
   core-telemetry/
+  core-ai/          (master plan: AI providers, ADR-016)
+  core-agent/       (master plan: agent framework)
+  core-sync/        (master plan: sync transports + E2EE, ADR-015)
+  core-plugin/      (master plan: plugin SDK + runtime, ADR-014/018)
+  core-crypto/      (master plan: E2EE primitives)
+  core-browser/     (master plan: clipper/reader/embeds)
+  core-audio/       (master plan: audio-linked notes)
+  core-knowledge/   (master plan: links/tags/graph)
 
 feature/
   feature-home/
   feature-notebook/
   feature-editor/
   feature-settings/
+  feature-knowledge/  (master plan)
+  feature-ai/         (master plan)
+  feature-sync/       (master plan)
+  feature-plugins/    (master plan)
+  feature-browser/    (master plan)
 
 editor/
   editor-canvas/
@@ -77,6 +90,10 @@ platform/
   platform-file-picker/
   platform-share/
   platform-stylus/
+  platform-desktop/       (master plan: desktop shell + Skiko ink, ADR-017)
+  platform-llm/           (master plan: on-device ONNX/NNAPI providers)
+  platform-plugin-host/   (master plan: QuickJS host, ADR-014)
+  platform-crypto/        (master plan: platform crypto backends)
 
 testing/
   testing-fakes/
@@ -90,9 +107,16 @@ testing/
 feature → editor/core/platform
 editor  → core + platform
 core    → core only
-platform→ Android-specific APIs
+platform→ Android/desktop-specific APIs
 app     → feature modules
 ```
+
+### Kotlin Multiplatform (master plan, ADR-013)
+
+Platform-free `core:*` modules are KMP: `commonMain` + `androidMain` +
+`desktopMain`. The rules below apply to all source sets. AndroidX Ink stays
+Android-only behind `InkAdapter`; desktop ink is Skiko (ADR-017). Persisted
+formats are platform-neutral.
 
 ### Never allowed
 
@@ -102,7 +126,10 @@ core-model → Activity
 core-model → ViewModel
 ```
 
-No downward layer may import a higher-level feature package ([plan §68](../plan.md#68-architecture-boundary-summary)).
+The same rules hold for all KMP source sets (`commonMain` must contain no
+Compose/Activity/ViewModel imports; `desktopMain` may use Skiko/desktop APIs
+only behind adapters). No downward layer may import a higher-level feature
+package ([plan §68](../plan.md#68-architecture-boundary-summary)).
 
 ## 3. Boundary summary
 
