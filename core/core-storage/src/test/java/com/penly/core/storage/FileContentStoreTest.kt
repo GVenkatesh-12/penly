@@ -33,6 +33,21 @@ class FileContentStoreTest {
     }
 
     @Test
+    fun put_leavesNoTemporaryFilesBehind() {
+        val store = store()
+        store.put("f.bin", "a".toByteArray())
+        store.put("f.bin", "b".toByteArray())
+        store.put("nested/g.bin", "c".toByteArray())
+        val tempResidue =
+            tempFolder.root
+                .walkTopDown()
+                .map { it.name }
+                .filter { it.endsWith(".tmp") }
+                .toList()
+        assertTrue("atomic write must clean up its temp file, got $tempResidue", tempResidue.isEmpty())
+    }
+
+    @Test
     fun open_missingFile_returnsNull() {
         assertNull(store().open("missing.txt"))
     }

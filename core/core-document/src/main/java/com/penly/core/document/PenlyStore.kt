@@ -17,6 +17,25 @@ import kotlinx.serialization.json.Json
  * - `pages/page-<pageId>.bin` — binary page file (page metadata + objects with payloads)
  * - `document.json` — [DocumentIndex] (document metadata + page refs, no objects)
  * - `manifest.json` — [Manifest] with per-file sha256 checksums, written last as the commit marker
+ * - `journal/` — crash-safety journal: pending page/index copies plus a [JournalCommit] marker
+ *
+ * ## Crash-safe save
+ *
+ * A save is staged through the journal so a crash at any point never loses committed content:
+ *
+ * ```text
+ * 1. write pending page + index copies into <docId>/journal/
+ * 2. write journal/commit.json (the commit point)
+ * 3. write the real page + index files (atomic per file)
+ * 4. write manifest.json (the durable commit marker)
+ * 5. delete the journal
+ * ```
+ *
+ * If the process dies before step 2 the journal is ignored and the previous committed state
+ * stands. If it dies after step 2, [load] finds the marker, validates the journal copies
+ * against it, replays them over the main files, rebuilds the manifest, and reports recovery.
+ * A marker whose listed files are missing or checksum-mismatched is discarded (the main state
+ * from an earlier completed save remains authoritative).
  */
 class PenlyStore(
     private val store: ContentStore,
@@ -24,38 +43,82 @@ class PenlyStore(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Writes [document] (all pages, index, then manifest) into the store. */
+    /** Writes [document] (all pages, index, then manifest) through the journal. */
     fun save(document: Document) {
         val documentId = document.documentId
-        val files = LinkedHashMap<String, String>()
-        for (page in document.pages) {
-            val path = pageFilePath(documentId, page.pageId)
-            store.put(path, PenlyFormat.encodePage(page, json))
-            files[path] = store.checksum(path)
-        }
+        val now = clock()
+        val pageFiles =
+            document.pages.associate { page ->
+                pageFilePath(documentId, page.pageId) to PenlyFormat.encodePage(page, json)
+            }
         val indexPath = indexPath(documentId)
         val indexJson =
             json.encodeToString(DocumentIndex.serializer(), DocumentIndex.from(document))
-        store.put(indexPath, indexJson.toByteArray(Charsets.UTF_8))
-        files[indexPath] = store.checksum(indexPath)
+        val indexBytes = indexJson.toByteArray(Charsets.UTF_8)
+
+        // 1. Stage pending copies into the journal.
+        val journalPaths = ArrayList<String>()
+        for ((path, bytes) in pageFiles) {
+            store.put(journalPath(documentId, path), bytes)
+            journalPaths += journalPath(documentId, path)
+        }
+        store.put(journalPath(documentId, indexPath), indexBytes)
+        journalPaths += journalPath(documentId, indexPath)
+
+        // 2. Commit point: the marker makes the journal authoritative. The journal only stages
+        // pages and the index; assets are integrity-checked through the manifest below.
+        val files = LinkedHashMap<String, String>()
+        for (path in pageFiles.keys) {
+            files[path] = store.checksum(journalPath(documentId, path))
+        }
+        files[indexPath] = store.checksum(journalPath(documentId, indexPath))
+        val commit =
+            JournalCommit(
+                documentId = documentId,
+                createdAtMillis = document.createdAtMillis,
+                updatedAtMillis = now,
+                files = files,
+            )
+        store.put(journalCommitPath(documentId), encode(commit))
+
+        // 3. Write the real files (atomic per file).
+        for ((path, bytes) in pageFiles) {
+            store.put(path, bytes)
+        }
+        store.put(indexPath, indexBytes)
+
+        // 4. Durable commit marker. Assets join the manifest (not the journal) so a corrupt
+        // image is detected on load without ever blocking journal replay.
+        includeAssets(documentId, files)
         val manifest =
             Manifest(
                 documentId = documentId,
                 createdAtMillis = document.createdAtMillis,
-                updatedAtMillis = clock(),
+                updatedAtMillis = now,
                 files = files,
             )
-        val manifestJson = json.encodeToString(Manifest.serializer(), manifest)
-        store.put(manifestPath(documentId), manifestJson.toByteArray(Charsets.UTF_8))
+        store.put(manifestPath(documentId), encode(manifest))
+
+        // 5. Journal is no longer needed.
+        for (path in journalPaths) {
+            store.delete(path)
+        }
+        store.delete(journalCommitPath(documentId))
     }
 
     /**
      * Loads the document at [documentId]. Every file listed in the manifest is checksum-verified;
-     * any mismatch, missing file, or incompatible manifest yields [LoadResult.Failure]. Unknown
-     * record types are preserved as opaque objects and reported as warnings, never as failures.
+     * any mismatch, missing file, or incompatible manifest yields [LoadResult.Failure]. Asset
+     * (image) mismatches degrade to warnings instead of failures — one corrupt image must not
+     * make the whole note unopenable. Unknown record types are preserved as opaque objects and
+     * reported as warnings, never as failures. When an interrupted save left a valid journal the
+     * journal is replayed first and the result reports [LoadResult.Success.recovered].
      */
     fun load(documentId: DocumentId): LoadResult {
         fun failure(message: String): LoadResult.Failure = LoadResult.Failure("document $documentId: $message")
+
+        val recovered = replayJournal(documentId)
+        val warnings = ArrayList<String>()
 
         val manifestBytes = store.open(manifestPath(documentId))
         if (manifestBytes == null) {
@@ -81,9 +144,13 @@ class PenlyStore(
                 try {
                     store.checksum(path)
                 } catch (e: Exception) {
-                    return failure("missing file '$path'")
+                    null
                 }
             if (actual != expected) {
+                if (isAssetPath(path)) {
+                    warnings += "asset '$path' missing or corrupted"
+                    continue
+                }
                 return failure("checksum mismatch for '$path'")
             }
         }
@@ -98,7 +165,6 @@ class PenlyStore(
             } catch (e: Exception) {
                 return failure("corrupt index: ${e.message}")
             }
-        val warnings = ArrayList<String>()
         val pages =
             index.pages.map { ref ->
                 val path = pageFilePath(documentId, ref.pageId)
@@ -132,7 +198,7 @@ class PenlyStore(
                 createdAtMillis = index.createdAtMillis,
                 updatedAtMillis = index.updatedAtMillis,
             )
-        return LoadResult.Success(document = document, warnings = warnings)
+        return LoadResult.Success(document = document, warnings = warnings, recovered = recovered)
     }
 
     /** Returns the ids of all documents present in the store (those with a manifest). */
@@ -149,8 +215,8 @@ class PenlyStore(
     /**
      * Writes an imported asset (e.g. an image) at `<documentId>/assets/<name>` and returns the
      * relative reference stored on an [com.penly.core.model.ImageObject]'s payloadRef
-     * ("assets/<name>"). Assets are written by the editor at insert time and are NOT listed in
-     * the manifest (integrity checks for assets land in Phase 4).
+     * ("assets/<name>"). Assets are included in the manifest's integrity metadata on the next
+     * [save]; load verifies them as warnings rather than hard failures.
      */
     fun putAsset(
         documentId: DocumentId,
@@ -167,6 +233,82 @@ class PenlyStore(
         documentId: DocumentId,
         payloadRef: String,
     ): ByteArray? = store.open("${documentId.value}/$payloadRef")
+
+    /**
+     * Replays a valid journal over the main files, rebuilds the manifest, and cleans the
+     * journal. Returns true when recovery happened. A journal is only trusted when its marker
+     * decodes and every listed copy exists with a matching checksum; otherwise it is ignored.
+     */
+    private fun replayJournal(documentId: DocumentId): Boolean {
+        val markerPath = journalCommitPath(documentId)
+        val markerBytes = store.open(markerPath) ?: return false
+        val commit =
+            try {
+                json.decodeFromString(JournalCommit.serializer(), markerBytes.toString(Charsets.UTF_8))
+            } catch (e: Exception) {
+                return false
+            }
+        if (commit.documentId != documentId) {
+            return false
+        }
+        for ((path, expected) in commit.files) {
+            if (!store.exists(journalPath(documentId, path))) return false
+            if (store.checksum(journalPath(documentId, path)) != expected) return false
+        }
+        for (path in commit.files.keys) {
+            val bytes = store.open(journalPath(documentId, path)) ?: return false
+            store.put(path, bytes)
+        }
+        val manifest =
+            Manifest(
+                documentId = documentId,
+                createdAtMillis = commit.createdAtMillis,
+                updatedAtMillis = commit.updatedAtMillis,
+                files = commit.files,
+            )
+        store.put(manifestPath(documentId), encode(manifest))
+        for (path in commit.files.keys) {
+            store.delete(journalPath(documentId, path))
+        }
+        store.delete(markerPath)
+        return true
+    }
+
+    /** Adds every file under `<documentId>/assets/` to [files] with its checksum. */
+    private fun includeAssets(
+        documentId: DocumentId,
+        files: MutableMap<String, String>,
+    ) {
+        val assetDir = "${documentId.value}/assets"
+        for (path in store.list(assetDir)) {
+            if (store.exists(path)) {
+                files[path] = store.checksum(path)
+            }
+        }
+    }
+
+    private fun isAssetPath(path: String): Boolean = path.contains("/assets/")
+
+    private fun journalCommitPath(documentId: DocumentId): String = "${documentId.value}/journal/commit.json"
+
+    private fun journalPath(
+        documentId: DocumentId,
+        mainPath: String,
+    ): String = "${documentId.value}/journal/${mainPath.removePrefix("${documentId.value}/")}"
+
+    private fun encode(commit: JournalCommit): ByteArray =
+        json
+            .encodeToString(
+                JournalCommit.serializer(),
+                commit,
+            ).toByteArray(Charsets.UTF_8)
+
+    private fun encode(manifest: Manifest): ByteArray =
+        json
+            .encodeToString(
+                Manifest.serializer(),
+                manifest,
+            ).toByteArray(Charsets.UTF_8)
 
     private fun manifestPath(documentId: DocumentId): String = "${documentId.value}/manifest.json"
 

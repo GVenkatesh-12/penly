@@ -163,6 +163,34 @@ open document
 
 **Never delete the journal before the corresponding durable state is known to be valid.**
 
+### Journal implementation (Phase 4)
+
+Implemented in `core:core-document` (`PenlyStore` + `JournalCommit`):
+
+1. `save()` stages page and index copies under `<docId>/journal/`, then writes
+   `commit.json` (the commit point: document id, timestamps, staged file list).
+2. Main files are then written with atomic `put` (temp sibling + fsync +
+   atomic rename, see below), followed by the manifest (which includes asset
+   checksums).
+3. The journal is deleted only after the manifest is durable.
+
+On `load()`:
+
+- If the journal exists and `commit.json` decodes and every listed staged copy
+  exists with a matching checksum, the staged state is replayed and
+  `LoadResult.Success.recovered` is `true` — the UI shows a "Recovered unsaved
+  changes" banner.
+- If the journal is missing, corrupt, or incomplete, it is ignored and the
+  last committed state is loaded.
+- Assets live in the manifest only (never the journal): a corrupt or missing
+  asset degrades to a warning instead of blocking document recovery.
+
+### Atomic writes
+
+`FileContentStore.put` and `move` write to a temporary sibling file, fsync the
+file, atomically rename over the target (with fallback for non-atomic
+filesystems), and best-effort fsync the directory.
+
 ## 5. Save semantics
 
 The user should never wonder whether a note is saved ([plan §44](../plan.md#44-save-semantics)). UI state may show:
@@ -222,5 +250,6 @@ Explicit test list ([plan §66](../plan.md#66-failure-scenarios-to-test-explicit
 - Document save/load round-trips
 - Migration tests for every persisted schema/document version ([migration-policy.md](../document-format/migration-policy.md))
 - Fault injection: automated tests simulating common crashes/power-loss must demonstrate that committed content is never lost ([plan §55, Phase 4](../plan.md#phase-4--crash-safety))
+- `PenlyStoreCrashSafetyTest` (Phase 4): a `CrashInjectingStore` kills the store after every save mutation (`crashAfter` sweep) and after each journal stage, verifying replay, state survival, and that `put`/`move` never leave temporary files behind.
 
 See [testing-guide.md](../contributing/testing-guide.md) for the full matrix.

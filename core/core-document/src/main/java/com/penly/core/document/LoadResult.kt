@@ -6,10 +6,14 @@ import com.penly.core.model.Document
  * Outcome of loading a document from a [PenlyStore].
  */
 sealed interface LoadResult {
-    /** The document was loaded; [warnings] lists non-fatal issues (e.g. opaque fallbacks). */
+    /**
+     * The document was loaded; [warnings] lists non-fatal issues (e.g. opaque fallbacks,
+     * degraded assets). [recovered] is true when an interrupted save's journal was replayed.
+     */
     data class Success(
         val document: Document,
         val warnings: List<String>,
+        val recovered: Boolean = false,
     ) : LoadResult
 
     /** The document could not be loaded; [reason] describes the failure. */

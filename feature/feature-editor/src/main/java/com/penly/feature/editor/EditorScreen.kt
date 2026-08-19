@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -60,6 +62,7 @@ fun editorScreen(
     state: InkCanvasState,
     modifier: Modifier = Modifier,
     store: PenlyStore? = null,
+    recovered: Boolean = false,
     documentIdProvider: () -> DocumentId? = { null },
 ) {
     var showTextDialog by remember { mutableStateOf(false) }
@@ -193,6 +196,22 @@ fun editorScreen(
                         .align(Alignment.TopStart)
                         .padding(8.dp),
             )
+            if (recovered) {
+                Surface(
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 8.dp),
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.tertiaryContainer,
+                ) {
+                    Text(
+                        text = "Recovered unsaved changes",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
         }
     }
     if (showTextDialog) {
@@ -273,6 +292,7 @@ fun editorScreen(
     val scope = rememberCoroutineScope()
     val saveMutex = remember { Mutex() }
     var document by remember { mutableStateOf<Document?>(createFreshDocument()) }
+    var recovered by remember { mutableStateOf(false) }
     val currentDocument by rememberUpdatedState(document)
 
     LaunchedEffect(store) {
@@ -281,7 +301,7 @@ fun editorScreen(
                 runCatching {
                     val latestId = store.listDocuments().lastOrNull() ?: return@withContext null
                     when (val result = store.load(latestId)) {
-                        is LoadResult.Success -> result.document
+                        is LoadResult.Success -> result
                         is LoadResult.Failure -> {
                             Log.w(TAG, "failed to load document $latestId: ${result.reason}")
                             null
@@ -292,18 +312,19 @@ fun editorScreen(
                     null
                 }
             }
-        val page = loaded?.pages?.firstOrNull()
+        val page = loaded?.document?.pages?.firstOrNull()
         if (page != null) {
             val loadedContent =
                 withContext(Dispatchers.IO) {
-                    loadPageContent(store, loaded.documentId, page)
+                    loadPageContent(store, loaded.document.documentId, page)
                 }
             state.loadRecords(loadedContent.records)
             state.loadObjects(loadedContent.objects)
             for ((objectId, bitmap) in loadedContent.images) {
                 state.setImage(objectId, bitmap)
             }
-            document = loaded
+            document = loaded.document
+            recovered = loaded.recovered
         } else {
             document = createFreshDocument()
         }
@@ -337,6 +358,7 @@ fun editorScreen(
         state = state,
         modifier = modifier,
         store = store,
+        recovered = recovered,
         documentIdProvider = { document?.documentId },
     )
 }

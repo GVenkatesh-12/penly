@@ -83,7 +83,7 @@ versionName `0.1.0-alpha.1`.
 - Commit style: imperative, concise, matching history (`docs: ...`, `build: ...`).
   Push to `origin main` after each green step.
 
-## Current state (Phase 1 Ink Lab — first working version)
+## Current state (Phase 1–4 — Ink Lab, objects, storage, crash safety)
 
 Phase 0 done: docs + license (commit `556420e`); settings.gradle.kts; root
 build.gradle.kts; gradle.properties; .gitignore; gradle wrapper 9.7.0;
@@ -118,6 +118,29 @@ run): kotlin 2.2.10 → 2.4.10 (needs review vs AGP 9.3.0 embedded KGP) and
 agp 9.3.0 → 9.3.1. core-ktx 1.19.0 stays at 1.18.0 — 1.19.0 requires
 compileSdk 37 and we target 36.
 
-Next: push Phase 1, verify CI; on-device validation of feel/performance
-(device-only criteria) before closing Phase 1. Any failing task — fix,
-don't silence.
+## Current state (Phase 4 Crash Safety — in progress)
+
+Master plan (Phases 8–17, feature matrix, ADRs 013–019) committed in `84202b8`
+(see `docs/plan.md` Part II).
+
+Phase 4 implemented so far, `./gradlew check` green locally:
+- Atomic writes in `FileContentStore.put`/`move` (temp sibling + fsync +
+  atomic rename + best-effort dir fsync).
+- Journal commit protocol in `PenlyStore`: `save()` stages page+index copies
+  under `<docId>/journal/`, writes `commit.json` marker, writes main files +
+  manifest, then deletes journal; `load()` replays the journal first and
+  reports `LoadResult.Success.recovered`; corrupt/missing journal is ignored;
+  assets live in manifest only (corrupt asset = warning, never blocks).
+- Recovery UI: "Recovered unsaved changes" banner in `EditorScreen`.
+- Fault-injection tests: `PenlyStoreCrashSafetyTest` (CrashInjectingStore
+  `crashAfter` sweep through every save mutation + per-stage crash tests +
+  journal-residue/corruption cases); `FileContentStoreTest` asserts no temp
+  files survive.
+
+ktlint quirks (learned the hard way): dot-chains containing a mid-chain call
+must wrap every link — `json` alone on its line, `.encodeToString(...)` on the
+next, and `).toByteArray(...)` glued to the closing paren; a trailing `.` link
+after a call needs the chain hoisted into a local instead.
+
+Next: push Phase 4, verify CI; remaining Phase 4 exit criteria per plan §55.
+Any failing task — fix, don't silence.

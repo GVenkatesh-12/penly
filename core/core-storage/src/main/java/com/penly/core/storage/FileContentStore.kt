@@ -2,10 +2,22 @@ package com.penly.core.storage
 
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.FileOutputStream
+import java.io.IOException
+import java.nio.channels.FileChannel
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 
 /**
  * File-backed [ContentStore] rooted at [root]. Missing files yield null from [open], [delete]
  * and [move] no-op on a missing source, [checksum] throws [FileNotFoundException] when absent.
+ *
+ * [put] is crash-safe: bytes are written to a temporary sibling file, fsynced, and atomically
+ * renamed over the target, so a crash mid-write never leaves a torn file behind. The parent
+ * directory is fsynced best-effort so the rename itself survives power loss where the
+ * platform permits it.
  */
 class FileContentStore(
     private val root: File,
@@ -17,7 +29,10 @@ class FileContentStore(
         ContentStorePaths.validate(path)
         val file = resolve(path)
         file.parentFile?.mkdirs()
-        file.writeBytes(bytes)
+        val tmp = File(file.parentFile, "${file.name}.tmp")
+        writeAndFsync(tmp, bytes)
+        moveAtomically(tmp, file)
+        fsyncDir(file.parentFile)
     }
 
     override fun open(path: String): ByteArray? {
@@ -36,9 +51,8 @@ class FileContentStore(
         if (!source.isFile) return
         val target = resolve(to)
         target.parentFile?.mkdirs()
-        if (!source.renameTo(target)) {
-            throw IllegalStateException("move failed: $from -> $to")
-        }
+        moveAtomically(source, target)
+        fsyncDir(target.parentFile)
     }
 
     override fun delete(path: String) {
@@ -68,4 +82,43 @@ class FileContentStore(
     }
 
     private fun resolve(path: String): File = File(root, path)
+
+    /** Writes [bytes] to [file] and fsyncs it to durable storage before returning. */
+    private fun writeAndFsync(
+        file: File,
+        bytes: ByteArray,
+    ) {
+        FileOutputStream(file).use { out ->
+            val channel = out.channel
+            channel.write(java.nio.ByteBuffer.wrap(bytes))
+            channel.force(true)
+        }
+    }
+
+    /** Renames [from] over [to] atomically, falling back to a plain move if unsupported. */
+    private fun moveAtomically(
+        from: File,
+        to: File,
+    ) {
+        try {
+            Files.move(
+                from.toPath(),
+                to.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (e: AtomicMoveNotSupportedException) {
+            Files.move(from.toPath(), to.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    /** Fsyncs [dir] so the rename above survives power loss; best-effort where unsupported. */
+    private fun fsyncDir(dir: File?) {
+        if (dir == null) return
+        try {
+            FileChannel.open(dir.toPath(), StandardOpenOption.READ).use { it.force(true) }
+        } catch (e: IOException) {
+            // Directory fsync is unavailable on some platforms; the rename is still atomic.
+        }
+    }
 }
