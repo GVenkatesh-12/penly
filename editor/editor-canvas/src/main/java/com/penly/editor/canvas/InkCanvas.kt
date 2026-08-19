@@ -21,6 +21,7 @@ import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.testTag
 import com.penly.core.geometry.Rect
 import com.penly.core.geometry.Transform
 import com.penly.core.model.ImageObject
@@ -47,7 +48,8 @@ fun inkCanvas(
                     state.setCanvasSize(
                         Size(size.width.toFloat(), size.height.toFloat()),
                     )
-                }.inkInput(state),
+                }.inkInput(state)
+                .testTag(INK_CANVAS_TAG),
         onDraw = {
             drawRect(color = Color.White)
             val matrix = Matrix()
@@ -99,6 +101,9 @@ fun inkCanvas(
 }
 
 private const val TAG: String = "InkCanvas"
+
+/** Semantics tag on the ink surface; UI tests target this node for gestures. */
+const val INK_CANVAS_TAG: String = "inkCanvas"
 
 // ----- Pre-allocated paints (avoid per-frame allocation) -----
 
