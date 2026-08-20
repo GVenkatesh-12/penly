@@ -16,12 +16,17 @@ class InMemoryContentStore : ContentStore {
         bytes: ByteArray,
     ) {
         ContentStorePaths.validate(path)
-        files[path] = bytes.copyOf()
+        val copy = bytes.copyOf()
+        synchronized(files) {
+            files[path] = copy
+        }
     }
 
     override fun open(path: String): ByteArray? {
         ContentStorePaths.validate(path)
-        return files[path]?.copyOf()
+        return synchronized(files) {
+            files[path]?.copyOf()
+        }
     }
 
     override fun move(
@@ -30,31 +35,41 @@ class InMemoryContentStore : ContentStore {
     ) {
         ContentStorePaths.validate(from)
         ContentStorePaths.validate(to)
-        val bytes = files.remove(from) ?: return
-        files[to] = bytes
+        synchronized(files) {
+            val bytes = files.remove(from) ?: return
+            files[to] = bytes
+        }
     }
 
     override fun delete(path: String) {
         ContentStorePaths.validate(path)
-        files.remove(path)
+        synchronized(files) {
+            files.remove(path)
+        }
     }
 
     override fun exists(path: String): Boolean {
         ContentStorePaths.validate(path)
-        return files.containsKey(path)
+        return synchronized(files) {
+            files.containsKey(path)
+        }
     }
 
     override fun checksum(path: String): String {
         ContentStorePaths.validate(path)
-        val bytes = files[path] ?: throw FileNotFoundException(path)
+        val bytes =
+            synchronized(files) {
+                files[path]
+            } ?: throw FileNotFoundException(path)
         return "sha256:" + ContentStorePaths.sha256Hex(bytes)
     }
 
     override fun list(dir: String): List<String> {
         ContentStorePaths.validate(dir, allowRoot = true)
         val prefix = if (dir.isEmpty()) "" else "$dir/"
+        val keys = synchronized(files) { files.keys.toList() }
         val children = LinkedHashSet<String>()
-        for (key in files.keys) {
+        for (key in keys) {
             if (key == dir || !key.startsWith(prefix)) continue
             val rest = key.substring(prefix.length)
             val slash = rest.indexOf('/')

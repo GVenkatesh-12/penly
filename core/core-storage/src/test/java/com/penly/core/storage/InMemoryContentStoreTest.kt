@@ -138,4 +138,25 @@ class InMemoryContentStoreTest {
             assertThrows(IllegalArgumentException::class.java) { store.list(path) }
         }
     }
+
+    @Test
+    fun concurrentReadAndWrite_doesNotThrowConcurrentModificationException() {
+        val store = store()
+        val threads =
+            (1..8).map { id ->
+                Thread {
+                    for (i in 1..100) {
+                        store.put("doc-$id/file-$i.txt", byteArrayOf(1))
+                        store.list("doc-$id")
+                        store.list("")
+                        store.open("doc-$id/file-$i.txt")
+                        if (i % 2 == 0) {
+                            store.delete("doc-$id/file-$i.txt")
+                        }
+                    }
+                }
+            }
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+    }
 }
