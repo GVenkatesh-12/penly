@@ -2,7 +2,6 @@ package com.penly.editor.canvas
 
 import android.graphics.RectF
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.ink.brush.InputToolType
 import androidx.ink.strokes.StrokeInput
@@ -89,6 +88,11 @@ internal class InkInputHandler(
         } else {
             state.abortEraseGesture(erasedStrokes, erasedObjects)
         }
+        // An aborted gesture must leave nothing to commit: otherwise a pinch-interrupt during
+        // an erase would restore the items but still push a delete command on up, and the next
+        // undo would duplicate the restored strokes.
+        erasedStrokes.clear()
+        erasedObjects.clear()
     }
 
     private fun strokeInput(
@@ -132,15 +136,15 @@ internal fun CanvasViewport.screenToPage(position: Offset): Offset =
         screenToPageY(position.y),
     )
 
-internal fun centroidOf(changes: List<PointerInputChange>): Offset =
-    changes.fold(Offset.Zero) { acc, change ->
-        acc + change.position
-    } / changes.size.toFloat()
+internal fun centroidOf(positions: Collection<Offset>): Offset {
+    if (positions.isEmpty()) return Offset.Zero
+    return positions.fold(Offset.Zero) { acc, position -> acc + position } / positions.size.toFloat()
+}
 
-internal fun spanOf(changes: List<PointerInputChange>): Float {
-    if (changes.size < 2) return 0f
-    val first = changes[0].position
-    val second = changes[1].position
+internal fun spanOf(positions: Collection<Offset>): Float {
+    if (positions.size < 2) return 0f
+    val first = positions.first()
+    val second = positions.last()
     return hypot(
         (second.x - first.x).toDouble(),
         (second.y - first.y).toDouble(),

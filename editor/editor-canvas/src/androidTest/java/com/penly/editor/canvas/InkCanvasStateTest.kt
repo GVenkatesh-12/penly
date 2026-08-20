@@ -8,6 +8,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.penly.core.common.PenlyIds
 import com.penly.core.geometry.Point
 import com.penly.core.geometry.Rect
+import com.penly.core.geometry.Transform
 import com.penly.core.ink.PenTool
 import com.penly.core.ink.StrokeRecord
 import com.penly.core.model.ImageObject
@@ -361,6 +362,44 @@ class InkCanvasStateTest {
     }
 
     @Test
+    fun selectObjectAt_addsToExistingSelection() {
+        val state = InkCanvasState()
+        state.insertText("First", 20f, 0xFF000000.toInt(), Point(10f, 10f))
+        val firstId = state.objects.first().objectId
+        state.insertText("Second", 20f, 0xFF000000.toInt(), Point(100f, 100f))
+        val secondId = state.objects.last().objectId
+
+        state.selectObjectAt(15f, 15f)
+        assertEquals(setOf(firstId), state.selectedIds)
+
+        // Tapping another item in selection mode extends the multi-selection.
+        state.selectObjectAt(105f, 105f)
+        assertEquals(setOf(firstId, secondId), state.selectedIds)
+        assertNotNull(state.selectionBounds)
+    }
+
+    @Test
+    fun undoRemovingSelectedStroke_reconcilesSelection() {
+        val state = InkCanvasState()
+        addSampleStroke(state, 10f, 10f, 30f, 30f)
+        val strokeId = state.strokes.first().objectId
+        state.selectObjectAt(20f, 20f)
+        assertTrue(state.isSelected(strokeId))
+        assertNotNull(state.selectionBounds)
+
+        // Undo removes the selected stroke; the selection must not float around nothing.
+        state.undo()
+        assertEquals(0, state.strokes.size)
+        assertEquals(0, state.selectedIds.size)
+        assertNull(state.selectionBounds)
+
+        // Redo restores the stroke; the selection stays empty (nothing was re-selected).
+        state.redo()
+        assertEquals(1, state.strokes.size)
+        assertNull(state.selectionBounds)
+    }
+
+    @Test
     fun clearSelectionPublic_clearsSelectedIdsAndBounds() {
         val state = InkCanvasState()
         state.insertText("Target", 20f, 0xFF000000.toInt(), Point(20f, 20f))
@@ -473,6 +512,42 @@ class InkCanvasStateTest {
         val redone = state.objects.first() as ImageObject
         assertEquals(83.333f, redone.bounds.right, 1f)
         assertEquals(83.333f, redone.bounds.bottom, 1f)
+    }
+
+    @Test
+    fun transformToMatrix_mapsPointsLikeTransformApply() {
+        val transform =
+            Transform(
+                translationX = 20f,
+                translationY = -15f,
+                scaleX = 2f,
+                scaleY = 3f,
+                rotationDegrees = 30f,
+            )
+        val matrix = transformToMatrix(transform)
+        for (p in listOf(Point(5f, 7f), Point(-2f, 4f), Point(0f, 0f))) {
+            val expected = transform.apply(p)
+            val mapped = floatArrayOf(p.x, p.y)
+            matrix.mapPoints(mapped)
+            assertEquals("x for $p", expected.x, mapped[0], 0.01f)
+            assertEquals("y for $p", expected.y, mapped[1], 0.01f)
+        }
+    }
+
+    @Test
+    fun movedStrokeThroughViewport_rendersAtViewportScaledTranslation() {
+        // A stroke moved by (20, 30) page units under a 3x zoom with offset (-410, -410) must
+        // map page points to 3 * (p + (20, 30)) + (-410, -410) — the selection box moves by the
+        // same rule, so ink and box can never drift apart at any zoom.
+        val composed =
+            transformToMatrix(
+                Transform(translationX = 20f, translationY = 30f)
+                    .throughViewport(scale = 3f, offsetX = -410f, offsetY = -410f),
+            )
+        val mapped = floatArrayOf(170f, 236.667f)
+        composed.mapPoints(mapped)
+        assertEquals(160f, mapped[0], 0.01f)
+        assertEquals(390f, mapped[1], 0.01f)
     }
 
     private fun addSampleStroke(

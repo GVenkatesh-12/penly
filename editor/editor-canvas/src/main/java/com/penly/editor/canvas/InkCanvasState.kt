@@ -99,13 +99,15 @@ class InkCanvasState {
     var onStrokesChanged: ((List<StrokeRecord>) -> Unit)? = null
 
     private var commands = UndoRedoStack<EditorCommand>()
+    private var canUndoState by mutableStateOf(false)
+    private var canRedoState by mutableStateOf(false)
     private val drawTick = mutableIntStateOf(0)
 
     val canUndo: Boolean
-        get() = commands.canUndo
+        get() = canUndoState
 
     val canRedo: Boolean
-        get() = commands.canRedo
+        get() = canRedoState
 
     val currentTick: Int
         get() = drawTick.intValue
@@ -212,7 +214,7 @@ class InkCanvasState {
                     bounds = computedBounds,
                 )
             val command = AddStroke(record)
-            commands.push(command)
+            pushCommand(command)
             command.redo(this)
         } catch (exception: RuntimeException) {
             Log.e(TAG, "endStroke rejected stroke", exception)
@@ -223,6 +225,7 @@ class InkCanvasState {
     fun loadRecords(records: List<StrokeRecord>) {
         strokes.clear()
         commands = UndoRedoStack()
+        syncHistoryState()
         strokes.addAll(records)
         bumpTick()
     }
@@ -242,12 +245,16 @@ class InkCanvasState {
 
     fun undo() {
         val command = commands.undo() ?: return
+        syncHistoryState()
         command.undo(this)
+        reconcileSelection()
     }
 
     fun redo() {
         val command = commands.redo() ?: return
+        syncHistoryState()
         command.redo(this)
+        reconcileSelection()
     }
 
     fun clearAll() {
@@ -255,6 +262,7 @@ class InkCanvasState {
         objects = emptyList()
         images.clear()
         commands = UndoRedoStack()
+        syncHistoryState()
         inProgressStroke = null
         clearSelection()
         onStrokesChanged?.invoke(strokes.toList())
@@ -358,7 +366,7 @@ class InkCanvasState {
                 removedObjects = removedObjects.map { it.second },
                 objectIndices = removedObjects.map { it.first },
             )
-        commands.push(command)
+        pushCommand(command)
         notifyPageChanged()
     }
 
@@ -395,7 +403,7 @@ class InkCanvasState {
                     removedObjects = emptyList(),
                     objectIndices = emptyList(),
                 )
-            commands.push(command)
+            pushCommand(command)
             command.redo(this)
             return
         }
@@ -408,7 +416,7 @@ class InkCanvasState {
                     removedObjects = listOf(hitObject),
                     objectIndices = listOf(objects.indexOf(hitObject)),
                 )
-            commands.push(command)
+            pushCommand(command)
             command.redo(this)
         }
     }
@@ -448,7 +456,7 @@ class InkCanvasState {
                 colorArgb = colorArgb,
             )
         val command = InsertObjects(listOf(objectText))
-        commands.push(command)
+        pushCommand(command)
         command.redo(this)
     }
 
@@ -470,7 +478,7 @@ class InkCanvasState {
                 mimeType = mimeType,
             )
         val command = InsertObjects(listOf(image))
-        commands.push(command)
+        pushCommand(command)
         command.redo(this)
     }
 
@@ -487,7 +495,7 @@ class InkCanvasState {
                 removedObjects = removedObjects,
                 objectIndices = removedObjects.map { objects.indexOf(it) },
             )
-        commands.push(command)
+        pushCommand(command)
         command.redo(this)
         clearSelection()
     }
@@ -555,7 +563,7 @@ class InkCanvasState {
                 translated.withObjectId(newId)
             }
         val command = InsertItems(newStrokes, newObjects)
-        commands.push(command)
+        pushCommand(command)
         command.redo(this)
 
         selectedIds = (newStrokes.map { it.objectId } + newObjects.map { it.objectId }).toSet()
@@ -593,7 +601,7 @@ class InkCanvasState {
                 }
         if (clonedStrokes.isNotEmpty() || clonedObjects.isNotEmpty()) {
             val command = InsertItems(clonedStrokes, clonedObjects)
-            commands.push(command)
+            pushCommand(command)
             command.redo(this)
 
             selectedIds = (clonedStrokes.map { it.objectId } + clonedObjects.map { it.objectId }).toSet()
@@ -640,7 +648,7 @@ class InkCanvasState {
         dy: Float,
     ) {
         if (selectedIds.isEmpty() || (dx == 0f && dy == 0f)) return
-        commands.push(MoveSelection(selectedIds.toList(), dx, dy))
+        pushCommand(MoveSelection(selectedIds.toList(), dx, dy))
         onStrokesChanged?.invoke(strokes.toList())
         bumpTick()
     }
@@ -746,7 +754,7 @@ class InkCanvasState {
                 oldObjects = initialObjects,
                 newObjects = currentObjects,
             )
-        commands.push(command)
+        pushCommand(command)
         notifyPageChanged()
     }
 
@@ -800,9 +808,10 @@ class InkCanvasState {
     }
 
     /**
-     * Direct selection: selects a single object (image/text/stroke) at the
-     * given page position. Returns the object id if hit, null if
-     * nothing was hit.
+     * Direct selection: selects the object (image/text/stroke) at the given page position.
+     * Tapping an item adds it to the current multi-selection (standard lasso-tool behavior),
+     * so users can tap several items in a row and then move or delete them together.
+     * Returns the object id if hit, null if nothing was hit.
      */
     fun selectObjectAt(
         pageX: Float,
@@ -823,7 +832,7 @@ class InkCanvasState {
                 expanded.contains(pageX, pageY)
             }
         if (hitObj != null) {
-            selectedIds = setOf(hitObj.objectId)
+            selectedIds = selectedIds + hitObj.objectId
             selectionBounds = computeSelectionBounds(selectedIds)
             bumpTick()
             return hitObj.objectId
@@ -858,7 +867,7 @@ class InkCanvasState {
                 prev = pt
             }
             if (hit) {
-                selectedIds = setOf(record.objectId)
+                selectedIds = selectedIds + record.objectId
                 selectionBounds = computeSelectionBounds(selectedIds)
                 bumpTick()
                 return record.objectId
@@ -1050,6 +1059,37 @@ class InkCanvasState {
 
     private fun notifyPageChanged() {
         onStrokesChanged?.invoke(strokes.toList())
+        bumpTick()
+    }
+
+    private fun pushCommand(command: EditorCommand) {
+        commands.push(command)
+        syncHistoryState()
+    }
+
+    /** Mirrors the command stack into observable state so Undo/Redo buttons update in place. */
+    private fun syncHistoryState() {
+        canUndoState = commands.canUndo
+        canRedoState = commands.canRedo
+    }
+
+    /**
+     * Drops selection entries that no longer exist on the page (e.g. after undoing the stroke
+     * that was selected) and recomputes the selection bounds so the selection box never floats
+     * around deleted content.
+     */
+    private fun reconcileSelection() {
+        if (selectedIds.isEmpty()) return
+        val validIds =
+            selectedIds.filter { id ->
+                strokes.any { it.objectId == id } || objects.any { it.objectId == id }
+            }
+        if (validIds.isEmpty()) {
+            clearSelection()
+        } else {
+            selectedIds = validIds.toSet()
+            selectionBounds = computeSelectionBounds(selectedIds)
+        }
         bumpTick()
     }
 

@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -52,15 +53,15 @@ fun inkCanvas(
                 .testTag(INK_CANVAS_TAG),
         onDraw = {
             drawRect(color = Color.White)
-            val matrix = Matrix()
-            matrix.setScale(
-                state.viewport.scale,
-                state.viewport.scale,
-            )
-            matrix.postTranslate(
-                state.viewport.offsetX,
-                state.viewport.offsetY,
-            )
+            val matrix =
+                transformToMatrix(
+                    Transform(
+                        translationX = state.viewport.offsetX,
+                        translationY = state.viewport.offsetY,
+                        scaleX = state.viewport.scale,
+                        scaleY = state.viewport.scale,
+                    ),
+                )
             state.currentTick
             drawIntoCanvas { canvas ->
                 val nativeCanvas = canvas.nativeCanvas
@@ -70,7 +71,13 @@ fun inkCanvas(
                             if (record.transform == Transform.IDENTITY) {
                                 matrix
                             } else {
-                                composeTransform(matrix, record.transform)
+                                transformToMatrix(
+                                    record.transform.throughViewport(
+                                        state.viewport.scale,
+                                        state.viewport.offsetX,
+                                        state.viewport.offsetY,
+                                    ),
+                                )
                             }
                         renderer.draw(
                             nativeCanvas,
@@ -129,6 +136,7 @@ private val SELECTION_RECT_PAINT =
         strokeWidth = 2f
         color = 0xFF2196F3.toInt()
         isAntiAlias = true
+        pathEffect = DashPathEffect(floatArrayOf(8f, 5f), 0f)
     }
 
 private val SELECTION_HANDLE_FILL =
@@ -180,24 +188,17 @@ private const val MIN_SELECTION_SIZE: Float = 20f
 
 // ------ Transform helpers ------
 
-private fun composeTransform(
-    viewportMatrix: Matrix,
-    transform: Transform,
-): Matrix {
-    val objMatrix = transformToMatrix(transform)
-    return Matrix(viewportMatrix).apply {
-        preConcat(objMatrix)
-    }
-}
-
-private fun transformToMatrix(transform: Transform): Matrix =
+/**
+ * Converts a [Transform] (`p' = t + R * S * p`) into the equivalent Android [Matrix]
+ * (`M = T * R * S`), so `matrix.mapPoints(p)` matches [Transform.apply]. Order matters:
+ * Android concatenation is left-multiplying, so translate/rotate/scale must be post-concat'd
+ * in the reverse order of application (scale first, then rotate, then translate).
+ */
+internal fun transformToMatrix(transform: Transform): Matrix =
     Matrix().apply {
-        setScale(transform.scaleX, transform.scaleY)
+        setTranslate(transform.translationX, transform.translationY)
         postRotate(transform.rotationDegrees)
-        postTranslate(
-            transform.translationX,
-            transform.translationY,
-        )
+        postScale(transform.scaleX, transform.scaleY)
     }
 
 // ------ Object rendering ------
@@ -399,6 +400,12 @@ private suspend fun AwaitPointerEventScope.handleDrawGesture(
 ) {
     val handler = InkInputHandler(state)
     val activePointerId = down.id
+    // Track every currently-pressed pointer position across events. Pointer events only carry
+    // the pointers that changed in that event, so counting `event.changes` directly misses
+    // fingers (a second finger landing arrives as a single change and would otherwise be routed
+    // into the drawing branch instead of starting a pinch-zoom).
+    val pointerPositions = mutableMapOf<PointerId, Offset>()
+    pointerPositions[activePointerId] = down.position
     var strokeStarted = false
     var centroid = down.position
     var span = 0f
@@ -417,15 +424,21 @@ private suspend fun AwaitPointerEventScope.handleDrawGesture(
     startDraw(down)
     while (true) {
         val event = awaitPointerEvent()
-        val pressed = event.changes.filter { it.pressed }
+        event.changes.forEach { change ->
+            if (change.pressed) {
+                pointerPositions[change.id] = change.position
+            } else {
+                pointerPositions.remove(change.id)
+            }
+        }
         when {
-            pressed.size >= 2 -> {
+            pointerPositions.size >= 2 -> {
                 if (strokeStarted) {
                     handler.abortStroke()
                     strokeStarted = false
                 }
-                val newCentroid = centroidOf(pressed)
-                val newSpan = spanOf(pressed)
+                val newCentroid = centroidOf(pointerPositions.values)
+                val newSpan = spanOf(pointerPositions.values)
                 if (!wasMultiTouch) {
                     wasMultiTouch = true
                 } else if (span > 0f) {
@@ -441,11 +454,13 @@ private suspend fun AwaitPointerEventScope.handleDrawGesture(
                 }
                 centroid = newCentroid
                 span = newSpan
-                pressed.forEach { it.consume() }
+                event.changes.forEach { change ->
+                    if (change.pressed) change.consume()
+                }
             }
-            pressed.size == 1 -> {
-                val change = pressed.first()
-                if (change.id == activePointerId) {
+            pointerPositions.size == 1 -> {
+                val change = event.changes.firstOrNull { it.pressed }
+                if (change != null && change.id == activePointerId) {
                     if (!strokeStarted && !wasMultiTouch) {
                         startDraw(change)
                     }
@@ -457,15 +472,12 @@ private suspend fun AwaitPointerEventScope.handleDrawGesture(
                             change.type,
                         )
                     }
-                    centroid = change.position
-                    span = 0f
                 }
-                change.consume()
+                change?.consume()
+                pointerPositions.values.firstOrNull()?.let { centroid = it }
+                span = 0f
             }
             else -> break
-        }
-        if (event.changes.none { it.pressed }) {
-            break
         }
     }
     handler.onUp()
@@ -534,14 +546,23 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
     var totalDy = 0f
     var maxDist = 0f
     var wasMultiTouch = false
+    // Track all pressed pointers across events (events only carry changed pointers).
+    val pointerPositions = mutableMapOf<PointerId, Offset>()
+    pointerPositions[activePointerId] = downPos
 
     while (true) {
         val event = awaitPointerEvent()
-        val pressed = event.changes.filter { it.pressed }
+        event.changes.forEach { change ->
+            if (change.pressed) {
+                pointerPositions[change.id] = change.position
+            } else {
+                pointerPositions.remove(change.id)
+            }
+        }
         when {
-            pressed.size >= 2 -> {
-                val newCentroid = centroidOf(pressed)
-                val newSpan = spanOf(pressed)
+            pointerPositions.size >= 2 -> {
+                val newCentroid = centroidOf(pointerPositions.values)
+                val newSpan = spanOf(pointerPositions.values)
                 if (!wasMultiTouch) {
                     wasMultiTouch = true
                 } else if (span > 0f) {
@@ -560,11 +581,13 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
                 val pageNow = state.viewport.screenToPage(newCentroid)
                 lastPageX = pageNow.x
                 lastPageY = pageNow.y
-                pressed.forEach { it.consume() }
+                event.changes.forEach { change ->
+                    if (change.pressed) change.consume()
+                }
             }
-            pressed.size == 1 -> {
-                val change = pressed.first()
-                if (change.id == activePointerId) {
+            pointerPositions.size == 1 -> {
+                val change = event.changes.firstOrNull { it.pressed }
+                if (change != null && change.id == activePointerId) {
                     val dx = change.position.x - downPos.x
                     val dy = change.position.y - downPos.y
                     val dist = hypot(dx.toDouble(), dy.toDouble()).toFloat()
@@ -618,15 +641,12 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
                             state.addLassoPoint(change.position.x, change.position.y)
                         }
                     }
-                    centroid = change.position
-                    span = 0f
                 }
-                change.consume()
+                change?.consume()
+                pointerPositions.values.firstOrNull()?.let { centroid = it }
+                span = 0f
             }
             else -> break
-        }
-        if (event.changes.none { it.pressed }) {
-            break
         }
     }
     if (wasMultiTouch) {

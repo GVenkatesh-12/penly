@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.penly.core.geometry.Point
 import com.penly.core.ink.PenTool
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -103,6 +104,26 @@ class InkInputHandlerTest {
 
         assertEquals(0, state.strokes.size)
         assertTrue(!state.canUndo)
+    }
+
+    @Test
+    fun pinchAbortDuringErase_restoresItemsAndPushesNothing() {
+        val state = InkCanvasState()
+        addStrokeThroughHandler(state)
+        assertEquals(1, state.strokes.size)
+
+        val handler = InkInputHandler(state)
+        state.selectTool(PenTool.ERASER)
+        handler.onDown(Offset(10f, 10f), timeMillis = 2000L, pressure = 1f, type = PointerType.Stylus)
+        handler.onMove(Offset(40f, 40f), timeMillis = 2016L, pressure = 1f, type = PointerType.Stylus)
+        assertEquals(0, state.strokes.size)
+
+        // Pinch interrupt: the erase gesture is rolled back and must not leave a delete command
+        // behind — otherwise the gesture up would commit it and the next undo would duplicate.
+        handler.abortStroke()
+        handler.onUp()
+        assertEquals(1, state.strokes.size)
+        assertFalse(state.canUndo)
     }
 
     @Test

@@ -51,6 +51,28 @@ data class Transform(
     ): Transform = copy(translationX = translationX + dx, translationY = translationY + dy)
 
     /**
+     * Composes a page→screen viewport transform (uniform [scale] plus [offsetX]/[offsetY])
+     * after this object transform: `p' = scale * this(p) + offset`.
+     *
+     * The result is exact because the viewport never rotates and scales uniformly, so the
+     * composition stays inside this parameterization: object translation is scaled and shifted
+     * by the viewport offset, object scale multiplies the viewport scale, and rotation is
+     * preserved. Used by the canvas to render an object transform under pan/zoom in one matrix.
+     */
+    fun throughViewport(
+        scale: Float,
+        offsetX: Float,
+        offsetY: Float,
+    ): Transform =
+        Transform(
+            translationX = translationX * scale + offsetX,
+            translationY = translationY * scale + offsetY,
+            scaleX = scaleX * scale,
+            scaleY = scaleY * scale,
+            rotationDegrees = rotationDegrees,
+        )
+
+    /**
      * Returns the transform that undoes this one: `scale' = (1/scaleX, 1/scaleY)`,
      * `rotation' = -rotationDegrees`, `translation' = -R(-theta) * S^-1 * t`.
      */

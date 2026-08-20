@@ -290,6 +290,46 @@ class EditorWorkflowUiTest {
     }
 
     @Test
+    fun pinchZoom_lassoMove_convertsDragDeltaToPageUnits() {
+        launchApp()
+        val canvasCenter = Offset(205f, 390f)
+        composeRule.onNodeWithTag(INK_CANVAS_TAG).performGesture {
+            pinch(
+                start0 = canvasCenter - Offset(50f, 0f),
+                end0 = canvasCenter - Offset(150f, 0f),
+                start1 = canvasCenter + Offset(50f, 0f),
+                end1 = canvasCenter + Offset(150f, 0f),
+            )
+        }
+        drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
+        waitForInkCount(1)
+
+        composeRule.onNodeWithText("Select").performClick()
+        composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
+            down(Offset(80f, 240f))
+            moveTo(Offset(320f, 240f))
+            moveTo(Offset(320f, 440f))
+            moveTo(Offset(80f, 440f))
+            up()
+        }
+        // Drag the selection by 60 screen px at 3x zoom: exactly 20 page units.
+        composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
+            down(Offset(200f, 300f))
+            moveBy(Offset(60f, 0f))
+            up()
+        }
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            firstInkObject()?.transform?.translationX == 20f
+        }
+        assertEquals(0f, firstInkObject()!!.transform.translationY, 0.1f)
+
+        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            firstInkObject()?.transform == com.penly.core.geometry.Transform.IDENTITY
+        }
+    }
+
+    @Test
     fun cutPaste_duplicatesContentAndUndoRestores() {
         launchApp()
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
