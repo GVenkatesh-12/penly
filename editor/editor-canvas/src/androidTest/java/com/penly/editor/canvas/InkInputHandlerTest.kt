@@ -7,7 +7,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.penly.core.geometry.Point
 import com.penly.core.ink.PenTool
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -120,10 +119,16 @@ class InkInputHandlerTest {
 
         // Pinch interrupt: the erase gesture is rolled back and must not leave a delete command
         // behind — otherwise the gesture up would commit it and the next undo would duplicate.
+        // The draw command must be the only entry on the stack: undoing removes the restored
+        // stroke (not re-inserting it as a delete undo would) and redoing brings it back.
         handler.abortStroke()
         handler.onUp()
         assertEquals(1, state.strokes.size)
-        assertFalse(state.canUndo)
+        assertTrue(state.canUndo)
+        state.undo()
+        assertEquals(0, state.strokes.size)
+        state.redo()
+        assertEquals(1, state.strokes.size)
     }
 
     @Test
@@ -181,7 +186,9 @@ class InkInputHandlerTest {
 
         // Re-add and erase from screen (50, 80) -> page (25, 40), ~10.6px off the diagonal:
         // outside the scaled-down 8px radius. At scale 1 the 16px radius would have hit,
-        // so this pins the scale division.
+        // so this pins the scale division. Switch back to a stroke tool first: the erase
+        // above left ERASER selected, and a gesture with ERASER active never draws.
+        state.selectTool(PenTool.PEN)
         addStrokeThroughHandler(state, from = Point(0f, 0f), to = Point(100f, 100f))
         val second = InkInputHandler(state)
         second.onDown(Offset(50f, 80f), timeMillis = 2000L, pressure = 1f, type = PointerType.Stylus)

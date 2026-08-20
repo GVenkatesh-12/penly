@@ -13,11 +13,13 @@ import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performGesture
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
+import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.up
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -336,6 +338,7 @@ class EditorWorkflowUiTest {
         waitForInkCount(1)
 
         composeRule.onNodeWithText("Select").performClick()
+        composeRule.onRoot().printToLog("SELDBGTREE")
         composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
             down(Offset(80f, 240f))
             moveTo(Offset(320f, 240f))
@@ -343,6 +346,7 @@ class EditorWorkflowUiTest {
             moveTo(Offset(80f, 440f))
             up()
         }
+        composeRule.onRoot().printToLog("SELDBGTREE")
         composeRule.onNodeWithText("Cut").performClick()
         waitForInkCount(0)
 
@@ -372,14 +376,14 @@ class EditorWorkflowUiTest {
         waitForInkCount(1)
 
         // Pinch math: scale 100 -> 300 (factor 3), centroid fixed at (205, 390), so
-        // offset = 205 - 205*3 = -410 and page = (screen + 410) / 3.
+        // offset = 205 - 205*3 = -410 for X and 390 - 390*3 = -780 for Y; page = (screen + offset) / 3.
         val record = InkObjectMapper.toStrokeRecord(firstInkObject()!!)!!
         val firstInput = record.stroke.inputs.get(0)
         val lastInput = record.stroke.inputs.get(record.stroke.inputs.size - 1)
         assertEquals((100f + 410f) / 3f, firstInput.x, PAGE_TOLERANCE)
-        assertEquals((300f + 410f) / 3f, firstInput.y, PAGE_TOLERANCE)
+        assertEquals((300f + 780f) / 3f, firstInput.y, PAGE_TOLERANCE)
         assertEquals((300f + 410f) / 3f, lastInput.x, PAGE_TOLERANCE)
-        assertEquals((300f + 410f) / 3f, lastInput.y, PAGE_TOLERANCE)
+        assertEquals((300f + 780f) / 3f, lastInput.y, PAGE_TOLERANCE)
     }
 
     @Test

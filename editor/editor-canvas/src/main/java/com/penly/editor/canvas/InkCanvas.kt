@@ -190,15 +190,15 @@ private const val MIN_SELECTION_SIZE: Float = 20f
 
 /**
  * Converts a [Transform] (`p' = t + R * S * p`) into the equivalent Android [Matrix]
- * (`M = T * R * S`), so `matrix.mapPoints(p)` matches [Transform.apply]. Order matters:
- * Android concatenation is left-multiplying, so translate/rotate/scale must be post-concat'd
- * in the reverse order of application (scale first, then rotate, then translate).
+ * (`M = T * R * S`), so `matrix.mapPoints(p)` matches [Transform.apply]. Android's
+ * `post*` calls concatenate on the LEFT (`M' = new * M`), so the operations must be
+ * applied in reverse order: scale, then rotate, then translate.
  */
 internal fun transformToMatrix(transform: Transform): Matrix =
     Matrix().apply {
-        setTranslate(transform.translationX, transform.translationY)
+        setScale(transform.scaleX, transform.scaleY)
         postRotate(transform.rotationDegrees)
-        postScale(transform.scaleX, transform.scaleY)
+        postTranslate(transform.translationX, transform.translationY)
     }
 
 // ------ Object rendering ------
@@ -386,6 +386,7 @@ private fun Modifier.inkInput(state: InkCanvasState): Modifier =
             val down =
                 awaitFirstDown(requireUnconsumed = false)
             down.consume()
+            Log.w(TAG, "SELDBG dispatch sel=${state.selectionMode} pos=$down.position")
             if (state.selectionMode) {
                 handleSelectionGesture(state, down)
             } else {
