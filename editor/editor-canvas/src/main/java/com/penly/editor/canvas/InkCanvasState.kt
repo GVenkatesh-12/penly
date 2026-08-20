@@ -120,6 +120,7 @@ class InkCanvasState {
     fun setSelectionMode(enabled: Boolean) {
         if (selectionModeState == enabled) return
         selectionModeState = enabled
+        Log.w(TAG, "SELDBG setSelectionMode enabled=$enabled")
         if (!enabled) {
             clearSelection()
         }
