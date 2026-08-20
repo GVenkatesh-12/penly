@@ -69,7 +69,7 @@ jobs:
           disable-animations: true
           force-avd-creation: false
           script: |
-            ./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.penly.app.EditorWorkflowUiTest || true
+            ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.penly.app.EditorWorkflowUiTest || true
             $ANDROID_HOME/platform-tools/adb logcat -d -v threadtime > logcat.txt || true
             exit 0
       - name: Upload logcat
