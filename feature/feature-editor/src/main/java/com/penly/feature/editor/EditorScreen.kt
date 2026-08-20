@@ -140,25 +140,6 @@ fun editorScreen(
                         TextButton(onClick = state::redo, enabled = state.canRedo) {
                             Text("Redo")
                         }
-                        TextButton(onClick = { showClearDialog = true }) {
-                            Text("Clear")
-                        }
-                        TextButton(onClick = { showTextDialog = true }) {
-                            Text("Text")
-                        }
-                        if (store != null) {
-                            TextButton(
-                                onClick = {
-                                    imagePicker.launch(
-                                        PickVisualMediaRequest(
-                                            ActivityResultContracts.PickVisualMedia.ImageOnly,
-                                        ),
-                                    )
-                                },
-                            ) {
-                                Text("Image")
-                            }
-                        }
                         if (state.selectionMode && state.selectionBounds != null) {
                             TextButton(onClick = state::deleteSelection) {
                                 Text("Delete")
@@ -171,6 +152,26 @@ fun editorScreen(
                             }
                             TextButton(onClick = { state.duplicateSelection() }) {
                                 Text("Duplicate")
+                            }
+                        } else {
+                            TextButton(onClick = { showClearDialog = true }) {
+                                Text("Clear")
+                            }
+                            TextButton(onClick = { showTextDialog = true }) {
+                                Text("Text")
+                            }
+                            if (store != null) {
+                                TextButton(
+                                    onClick = {
+                                        imagePicker.launch(
+                                            PickVisualMediaRequest(
+                                                ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                            ),
+                                        )
+                                    },
+                                ) {
+                                    Text("Image")
+                                }
                             }
                         }
                         if (state.canPaste) {

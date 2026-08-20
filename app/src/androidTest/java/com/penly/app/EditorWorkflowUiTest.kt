@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performGesture
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
@@ -148,11 +149,11 @@ class EditorWorkflowUiTest {
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
         waitForInkCount(1)
 
-        composeRule.onNodeWithText("Eraser").performClick()
+        composeRule.onNodeWithText("Eraser").performScrollTo().performClick()
         drawSwipe(Offset(80f, 300f), Offset(320f, 300f))
         waitForInkCount(0)
 
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         waitForInkCount(1)
     }
 
@@ -162,7 +163,7 @@ class EditorWorkflowUiTest {
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
         waitForInkCount(1)
 
-        composeRule.onNodeWithText("Clear").performClick()
+        composeRule.onNodeWithText("Clear").performScrollTo().performClick()
         composeRule.onNodeWithText("Cancel").performClick()
         composeRule.waitForIdle()
 
@@ -175,7 +176,7 @@ class EditorWorkflowUiTest {
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
         waitForInkCount(1)
 
-        composeRule.onNodeWithText("Clear").performClick()
+        composeRule.onNodeWithText("Clear").performScrollTo().performClick()
         // The top bar button and the dialog confirm button share the label. Dialogs are
         // composed in their own root after the main root, so index 1 is the dialog's button.
         composeRule.onAllNodesWithText("Clear")[1].performClick()
@@ -188,12 +189,12 @@ class EditorWorkflowUiTest {
     @Test
     fun textDialog_okAddsTextAndUndoRemovesIt() {
         launchApp()
-        composeRule.onNodeWithText("Text").performClick()
+        composeRule.onNodeWithText("Text").performScrollTo().performClick()
         composeRule.onNodeWithText("OK").performClick()
         composeRule.waitForIdle()
         assertEquals(0, savedTextCount())
 
-        composeRule.onNodeWithText("Text").performClick()
+        composeRule.onNodeWithText("Text").performScrollTo().performClick()
         composeRule.onNode(hasSetTextAction()).performTextInput("Hello Penly")
         composeRule.onNodeWithText("OK").performClick()
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) { savedTextCount() == 1 }
@@ -206,14 +207,14 @@ class EditorWorkflowUiTest {
                 .first()
         assertEquals("Hello Penly", textObject.text)
 
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) { savedTextCount() == 0 }
     }
 
     @Test
     fun textDialog_cancelAddsNothing() {
         launchApp()
-        composeRule.onNodeWithText("Text").performClick()
+        composeRule.onNodeWithText("Text").performScrollTo().performClick()
         composeRule.onNode(hasSetTextAction()).performTextInput("will be discarded")
         composeRule.onNodeWithText("Cancel").performClick()
         composeRule.waitForIdle()
@@ -225,16 +226,16 @@ class EditorWorkflowUiTest {
         launchApp()
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
         waitForInkCount(1)
-        composeRule.onNodeWithText("Text").performClick()
+        composeRule.onNodeWithText("Text").performScrollTo().performClick()
         composeRule.onNode(hasSetTextAction()).performTextInput("note")
         composeRule.onNodeWithText("OK").performClick()
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) { savedTextCount() == 1 }
 
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) { savedTextCount() == 0 }
         assertEquals(1, savedInkCount())
 
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         waitForInkCount(0)
     }
 
@@ -244,7 +245,7 @@ class EditorWorkflowUiTest {
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
         waitForInkCount(1)
 
-        composeRule.onNodeWithText("Select").performClick()
+        composeRule.onNodeWithText("Select").performScrollTo().performClick()
         composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
             down(Offset(80f, 240f))
             moveTo(Offset(320f, 240f))
@@ -252,10 +253,10 @@ class EditorWorkflowUiTest {
             moveTo(Offset(80f, 440f))
             up()
         }
-        composeRule.onNodeWithText("Delete").performClick()
+        composeRule.onNodeWithText("Delete").performScrollTo().performClick()
         waitForInkCount(0)
 
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         waitForInkCount(1)
     }
 
@@ -265,7 +266,7 @@ class EditorWorkflowUiTest {
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
         waitForInkCount(1)
 
-        composeRule.onNodeWithText("Select").performClick()
+        composeRule.onNodeWithText("Select").performScrollTo().performClick()
         composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
             down(Offset(80f, 240f))
             moveTo(Offset(320f, 240f))
@@ -283,7 +284,7 @@ class EditorWorkflowUiTest {
         }
         assertEquals(30f, firstInkObject()!!.transform.translationY, 0.1f)
 
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
             firstInkObject()?.transform == com.penly.core.geometry.Transform.IDENTITY
         }
@@ -304,7 +305,7 @@ class EditorWorkflowUiTest {
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
         waitForInkCount(1)
 
-        composeRule.onNodeWithText("Select").performClick()
+        composeRule.onNodeWithText("Select").performScrollTo().performClick()
         composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
             down(Offset(80f, 240f))
             moveTo(Offset(320f, 240f))
@@ -323,7 +324,7 @@ class EditorWorkflowUiTest {
         }
         assertEquals(0f, firstInkObject()!!.transform.translationY, 0.1f)
 
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
             firstInkObject()?.transform == com.penly.core.geometry.Transform.IDENTITY
         }
@@ -335,7 +336,7 @@ class EditorWorkflowUiTest {
         drawSwipe(Offset(100f, 300f), Offset(300f, 300f))
         waitForInkCount(1)
 
-        composeRule.onNodeWithText("Select").performClick()
+        composeRule.onNodeWithText("Select").performScrollTo().performClick()
         composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
             down(Offset(80f, 240f))
             moveTo(Offset(320f, 240f))
@@ -343,16 +344,16 @@ class EditorWorkflowUiTest {
             moveTo(Offset(80f, 440f))
             up()
         }
-        composeRule.onNodeWithText("Cut").performClick()
+        composeRule.onNodeWithText("Cut").performScrollTo().performClick()
         waitForInkCount(0)
 
-        composeRule.onNodeWithText("Paste").performClick()
+        composeRule.onNodeWithText("Paste").performScrollTo().performClick()
         waitForInkCount(1)
 
         // First undo removes the pasted clone; the second restores the cut original.
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         waitForInkCount(0)
-        composeRule.onNodeWithText("Undo").performClick()
+        composeRule.onNodeWithText("Undo").performScrollTo().performClick()
         waitForInkCount(1)
     }
 
