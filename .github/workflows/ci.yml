@@ -68,23 +68,7 @@ jobs:
           profile: pixel_7
           disable-animations: true
           force-avd-creation: false
-          script: |
-            ./gradlew clean :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.penly.app.EditorWorkflowUiTest || true
-            cp -f app/build/outputs/apk/debug/app-debug.apk app-under-test.apk || true
-            $ANDROID_HOME/platform-tools/adb logcat -d -v threadtime > logcat.txt || true
-            exit 0
-      - name: Upload app under test
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: app-under-test
-          path: app-under-test.apk
-      - name: Upload logcat
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: logcat
-          path: logcat.txt
+          script: ./gradlew connectedDebugAndroidTest
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v7

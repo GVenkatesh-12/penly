@@ -386,7 +386,6 @@ private fun Modifier.inkInput(state: InkCanvasState): Modifier =
             val down =
                 awaitFirstDown(requireUnconsumed = false)
             down.consume()
-            Log.w(TAG, "SELDBG dispatch sel=${state.selectionMode} pos=$down.position")
             if (state.selectionMode) {
                 handleSelectionGesture(state, down)
             } else {
@@ -534,12 +533,10 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
                 SelectionGestureMode.Lasso
             }
         }
-    Log.w(TAG, "SELDBG mode=$mode sel=${state.selectionMode} down=$downPos page=$downPage")
 
     if (mode is SelectionGestureMode.Lasso) {
         state.addLassoPoint(downPos.x, downPos.y)
     }
-    Log.w(TAG, "SELDBG start mode=$mode lassoPts=${state.lassoPoints.size}")
 
     var centroid = downPos
     var span = 0f
@@ -654,12 +651,10 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
     }
     if (wasMultiTouch) {
         state.lassoPoints = emptyList()
-        Log.w(TAG, "SELDBG end MULTITOUCH abort")
         return
     }
     val elapsed = System.currentTimeMillis() - downTime
     val isTap = maxDist < TAP_SLOP && elapsed < TAP_TIMEOUT
-    Log.w(TAG, "SELDBG end mode=$mode dist=$maxDist tap=$isTap pts=${state.lassoPoints.size}")
     when (mode) {
         is SelectionGestureMode.Resize -> {
             if (!isTap && initialBounds != null) {
@@ -669,19 +664,14 @@ private suspend fun AwaitPointerEventScope.handleSelectionGesture(
         is SelectionGestureMode.Move -> {
             if (!isTap) {
                 state.commitMove(totalDx, totalDy)
-                Log.w(TAG, "SELDBG move commit dx=$totalDx dy=$totalDy")
-            } else {
-                Log.w(TAG, "SELDBG move TAP no-commit")
             }
         }
         is SelectionGestureMode.Lasso -> {
             if (isTap) {
                 state.lassoPoints = emptyList()
                 state.clearSelectionPublic()
-                Log.w(TAG, "SELDBG lasso TAP -> clear")
             } else {
                 state.selectLasso(state.lassoPoints)
-                Log.w(TAG, "SELDBG lasso ids=${state.selectedIds.size}")
             }
         }
     }

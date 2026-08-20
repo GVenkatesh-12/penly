@@ -13,13 +13,11 @@ import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performGesture
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
-import androidx.compose.ui.test.printToLog
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.up
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -338,7 +336,6 @@ class EditorWorkflowUiTest {
         waitForInkCount(1)
 
         composeRule.onNodeWithText("Select").performClick()
-        composeRule.onRoot().printToLog("SELDBGTREE")
         composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
             down(Offset(80f, 240f))
             moveTo(Offset(320f, 240f))
@@ -346,7 +343,6 @@ class EditorWorkflowUiTest {
             moveTo(Offset(80f, 440f))
             up()
         }
-        composeRule.onRoot().printToLog("SELDBGTREE")
         composeRule.onNodeWithText("Cut").performClick()
         waitForInkCount(0)
 

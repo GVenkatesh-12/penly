@@ -6,9 +6,12 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -127,48 +130,53 @@ fun editorScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Page 1") },
                 actions = {
-                    TextButton(onClick = state::undo, enabled = state.canUndo) {
-                        Text("Undo")
-                    }
-                    TextButton(onClick = state::redo, enabled = state.canRedo) {
-                        Text("Redo")
-                    }
-                    TextButton(onClick = { showClearDialog = true }) {
-                        Text("Clear")
-                    }
-                    TextButton(onClick = { showTextDialog = true }) {
-                        Text("Text")
-                    }
-                    if (store != null) {
-                        TextButton(
-                            onClick = {
-                                imagePicker.launch(
-                                    PickVisualMediaRequest(
-                                        ActivityResultContracts.PickVisualMedia.ImageOnly,
-                                    ),
-                                )
-                            },
-                        ) {
-                            Text("Image")
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = state::undo, enabled = state.canUndo) {
+                            Text("Undo")
                         }
-                    }
-                    if (state.selectionMode && state.selectionBounds != null) {
-                        TextButton(onClick = state::deleteSelection) {
-                            Text("Delete")
+                        TextButton(onClick = state::redo, enabled = state.canRedo) {
+                            Text("Redo")
                         }
-                        TextButton(onClick = state::cutSelection) {
-                            Text("Cut")
+                        TextButton(onClick = { showClearDialog = true }) {
+                            Text("Clear")
                         }
-                        TextButton(onClick = state::copySelection) {
-                            Text("Copy")
+                        TextButton(onClick = { showTextDialog = true }) {
+                            Text("Text")
                         }
-                        TextButton(onClick = { state.duplicateSelection() }) {
-                            Text("Duplicate")
+                        if (store != null) {
+                            TextButton(
+                                onClick = {
+                                    imagePicker.launch(
+                                        PickVisualMediaRequest(
+                                            ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                        ),
+                                    )
+                                },
+                            ) {
+                                Text("Image")
+                            }
                         }
-                    }
-                    if (state.canPaste) {
-                        TextButton(onClick = { state.paste() }) {
-                            Text("Paste")
+                        if (state.selectionMode && state.selectionBounds != null) {
+                            TextButton(onClick = state::deleteSelection) {
+                                Text("Delete")
+                            }
+                            TextButton(onClick = state::cutSelection) {
+                                Text("Cut")
+                            }
+                            TextButton(onClick = state::copySelection) {
+                                Text("Copy")
+                            }
+                            TextButton(onClick = { state.duplicateSelection() }) {
+                                Text("Duplicate")
+                            }
+                        }
+                        if (state.canPaste) {
+                            TextButton(onClick = { state.paste() }) {
+                                Text("Paste")
+                            }
                         }
                     }
                 },

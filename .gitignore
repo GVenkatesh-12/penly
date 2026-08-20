@@ -19,3 +19,7 @@ captures/
 *.jks
 *.keystore
 keystore.properties
+
+# Scratch / bytecode inspection
+.ink-inspect/
+*.class
