@@ -10,6 +10,14 @@ android {
     defaultConfig {
         minSdk = 26
     }
+
+    testOptions {
+        unitTests {
+            // PenlyStore logs skipped documents via android.util.Log; JVM tests get
+            // no-op defaults instead of stub exceptions.
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {

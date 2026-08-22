@@ -10,6 +10,7 @@ import com.penly.core.model.ObjectId
 import com.penly.core.model.OpaqueObject
 import com.penly.core.model.Page
 import com.penly.core.model.PageId
+import com.penly.core.model.PageTemplate
 import com.penly.core.model.TextObject
 import com.penly.core.storage.InMemoryContentStore
 import kotlinx.serialization.encodeToString
@@ -17,6 +18,7 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
@@ -241,6 +243,129 @@ class PenlyStoreTest {
         assertEquals("future-widget", opaqueAgain.kind)
         assertEquals("widget-1", opaqueAgain.objectId.value)
         assertTrue(opaqueAgain.payload!!.contentEquals(payload))
+    }
+
+    @Test
+    fun roundTrip_preservesTemplateAndLibraryFields() {
+        val documentId = DocumentId("doc-library")
+        val document =
+            Document(
+                documentId = documentId,
+                title = "Field notes",
+                favorite = true,
+                trashed = false,
+                section = "Research",
+                pages =
+                    listOf(
+                        Page(
+                            pageId = PageId("page-grid"),
+                            documentId = documentId,
+                            title = "Page 1",
+                            template = PageTemplate.GRID,
+                        ),
+                        Page(
+                            pageId = PageId("page-cornell"),
+                            documentId = documentId,
+                            title = "Page 2",
+                            template = PageTemplate.CORNELL,
+                        ),
+                    ),
+            )
+
+        penlyStore.save(document)
+        val loaded = penlyStore.load(documentId)
+
+        assertTrue(loaded is LoadResult.Success)
+        val restored = (loaded as LoadResult.Success).document
+        assertEquals(document.favorite, restored.favorite)
+        assertEquals(document.trashed, restored.trashed)
+        assertEquals(document.section, restored.section)
+        assertEquals(PageTemplate.GRID, restored.pages[0].template)
+        assertEquals(PageTemplate.CORNELL, restored.pages[1].template)
+    }
+
+    @Test
+    fun listSummaries_reflectsIndexMetadata_andSortsMostRecentFirst() {
+        penlyStore.save(
+            Document(
+                documentId = DocumentId("doc-old"),
+                title = "Old",
+                section = "Work",
+                pages = listOf(Page(pageId = PageId("p1"), documentId = DocumentId("doc-old"))),
+                updatedAtMillis = 100L,
+            ),
+        )
+        penlyStore.save(
+            Document(
+                documentId = DocumentId("doc-new"),
+                title = "New",
+                favorite = true,
+                trashed = true,
+                pages =
+                    listOf(
+                        Page(pageId = PageId("p2"), documentId = DocumentId("doc-new")),
+                        Page(pageId = PageId("p3"), documentId = DocumentId("doc-new")),
+                    ),
+                updatedAtMillis = 200L,
+            ),
+        )
+
+        val summaries = penlyStore.listSummaries()
+
+        assertEquals(listOf("doc-new", "doc-old"), summaries.map { it.documentId.value })
+        val newer = summaries[0]
+        assertEquals("New", newer.title)
+        assertTrue(newer.favorite)
+        assertTrue(newer.trashed)
+        assertNull(newer.section)
+        assertEquals(2, newer.pageCount)
+        assertEquals(PageId("p2"), newer.firstPageId)
+        val older = summaries[1]
+        assertEquals("Work", older.section)
+        assertFalse(older.favorite)
+        assertEquals(1, older.pageCount)
+    }
+
+    @Test
+    fun listSummaries_skipsCorruptIndex_butKeepsHealthyDocuments() {
+        penlyStore.save(singleInkPageDocument())
+        penlyStore.save(Document(documentId = DocumentId("doc-broken"), title = "Broken"))
+        store.put("doc-broken/document.json", "{not json".toByteArray(Charsets.UTF_8))
+
+        val summaries = penlyStore.listSummaries()
+
+        assertEquals(listOf("doc-single"), summaries.map { it.documentId.value })
+    }
+
+    @Test
+    fun thumbnails_roundTripThroughTheStore() {
+        val documentId = DocumentId("doc-thumb")
+        val pageId = PageId("page-thumb")
+
+        assertNull(penlyStore.openThumbnail(documentId, pageId))
+        penlyStore.putThumbnail(documentId, pageId, byteArrayOf(1, 2, 3))
+
+        assertTrue(penlyStore.openThumbnail(documentId, pageId)!!.contentEquals(byteArrayOf(1, 2, 3)))
+    }
+
+    @Test
+    fun deleteDocument_removesEveryFile_underTheDocumentDirectory() {
+        penlyStore.save(singleInkPageDocument())
+        val other =
+            Document(
+                documentId = DocumentId("doc-other"),
+                title = "Other",
+                pages = listOf(Page(pageId = PageId("page-o"), documentId = DocumentId("doc-other"))),
+            )
+        penlyStore.save(other)
+        penlyStore.putThumbnail(DocumentId("doc-single"), PageId("page-single"), byteArrayOf(9))
+
+        penlyStore.deleteDocument(DocumentId("doc-single"))
+
+        assertTrue(store.list("doc-single").isEmpty())
+        assertTrue(penlyStore.listDocuments().none { it.value == "doc-single" })
+        assertTrue(penlyStore.load(DocumentId("doc-single")) is LoadResult.Failure)
+        assertEquals("Other", penlyStore.load(DocumentId("doc-other")).let { (it as LoadResult.Success).document.title })
     }
 
     private fun singleInkPageDocument(): Document {

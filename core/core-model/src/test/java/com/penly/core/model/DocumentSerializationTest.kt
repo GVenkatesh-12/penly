@@ -134,4 +134,54 @@ class DocumentSerializationTest {
         assertEquals(document, decoded)
         assertTrue(encoded.contains("\"documentId\":\"${document.documentId.value}\""))
     }
+
+    @Test
+    fun oldJsonWithoutNewFields_decodesWithDefaults() {
+        val legacy =
+            """
+            {
+              "documentId": "doc-legacy",
+              "title": "Legacy",
+              "pages": [
+                {
+                  "pageId": "page-legacy",
+                  "documentId": "doc-legacy"
+                }
+              ]
+            }
+            """.trimIndent()
+
+        val decoded = json.decodeFromString(Document.serializer(), legacy)
+
+        assertEquals(PageTemplate.BLANK, decoded.pages[0].template)
+        assertFalse(decoded.favorite)
+        assertFalse(decoded.trashed)
+        assertNull(decoded.section)
+    }
+
+    @Test
+    fun templateAndLibraryFields_roundTrip() {
+        val documentId = DocumentId(PenlyIds.newId())
+        val document =
+            Document(
+                documentId = documentId,
+                title = "Templates",
+                favorite = true,
+                trashed = false,
+                section = "Journal",
+                pages =
+                    listOf(
+                        Page(
+                            pageId = PageId(PenlyIds.newId()),
+                            documentId = documentId,
+                            template = PageTemplate.DOTS,
+                        ),
+                    ),
+            )
+        val encoded = json.encodeToString(Document.serializer(), document)
+        val decoded = json.decodeFromString(Document.serializer(), encoded)
+
+        assertEquals(document, decoded)
+        assertTrue(encoded.contains("\"template\":\"DOTS\""))
+    }
 }

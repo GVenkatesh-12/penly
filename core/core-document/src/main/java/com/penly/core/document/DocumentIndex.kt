@@ -3,6 +3,7 @@ package com.penly.core.document
 import com.penly.core.model.Document
 import com.penly.core.model.DocumentId
 import com.penly.core.model.PageId
+import com.penly.core.model.PageTemplate
 import kotlinx.serialization.Serializable
 
 /**
@@ -19,6 +20,9 @@ internal data class DocumentIndex(
     val createdAtMillis: Long,
     val updatedAtMillis: Long,
     val pages: List<PageRef>,
+    val favorite: Boolean = false,
+    val trashed: Boolean = false,
+    val section: String? = null,
 ) {
     companion object {
         fun from(document: Document): DocumentIndex =
@@ -36,8 +40,12 @@ internal data class DocumentIndex(
                             revision = page.revision,
                             createdAtMillis = page.createdAtMillis,
                             updatedAtMillis = page.updatedAtMillis,
+                            template = page.template,
                         )
                     },
+                favorite = document.favorite,
+                trashed = document.trashed,
+                section = document.section,
             )
     }
 }
@@ -50,4 +58,5 @@ internal data class PageRef(
     val revision: Long,
     val createdAtMillis: Long,
     val updatedAtMillis: Long,
+    val template: PageTemplate = PageTemplate.BLANK,
 )

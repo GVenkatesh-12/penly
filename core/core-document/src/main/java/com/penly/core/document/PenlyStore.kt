@@ -1,5 +1,6 @@
 package com.penly.core.document
 
+import android.util.Log
 import com.penly.core.model.Document
 import com.penly.core.model.DocumentId
 import com.penly.core.model.Manifest
@@ -201,6 +202,7 @@ class PenlyStore(
                     documentId = documentId,
                     title = ref.title,
                     objects = decoded.objects,
+                    template = ref.template,
                     revision = ref.revision,
                     createdAtMillis = ref.createdAtMillis,
                     updatedAtMillis = ref.updatedAtMillis,
@@ -211,6 +213,9 @@ class PenlyStore(
                 documentId = documentId,
                 title = index.title,
                 pages = pages,
+                favorite = index.favorite,
+                trashed = index.trashed,
+                section = index.section,
                 revision = index.revision,
                 createdAtMillis = index.createdAtMillis,
                 updatedAtMillis = index.updatedAtMillis,
@@ -227,6 +232,97 @@ class PenlyStore(
                 if (id.isEmpty() || id.contains('/')) return@mapNotNull null
                 if (store.exists("$id/manifest.json")) DocumentId(id) else null
             }.sortedBy { it.value }
+    }
+
+    /**
+     * Builds a [DocumentSummary] per stored document from the `document.json` index alone
+     * (page payloads are never decoded). Documents whose index is missing or corrupt are
+     * skipped with a warning — one broken notebook must never break the library. Sorted by
+     * [DocumentSummary.updatedAtMillis], most recent first.
+     */
+    fun listSummaries(): List<DocumentSummary> =
+        synchronized(ioLock) {
+            store
+                .list("")
+                .mapNotNull { entry ->
+                    val id = entry.removeSuffix("/")
+                    if (id.isEmpty() || id.contains('/')) return@mapNotNull null
+                    val documentId = DocumentId(id)
+                    val indexBytes =
+                        try {
+                            store.open(indexPath(documentId))
+                        } catch (e: Exception) {
+                            Log.w(TAG, "unreadable index for $id", e)
+                            null
+                        }
+                    if (indexBytes == null) {
+                        Log.w(TAG, "skipping document $id: no document.json")
+                        return@mapNotNull null
+                    }
+                    val index =
+                        try {
+                            json.decodeFromString(DocumentIndex.serializer(), indexBytes.toString(Charsets.UTF_8))
+                        } catch (e: Exception) {
+                            Log.w(TAG, "skipping document $id: corrupt document.json", e)
+                            return@mapNotNull null
+                        }
+                    DocumentSummary(
+                        documentId = documentId,
+                        title = index.title,
+                        section = index.section,
+                        favorite = index.favorite,
+                        trashed = index.trashed,
+                        pageCount = index.pages.size,
+                        firstPageId = index.pages.firstOrNull()?.pageId,
+                        revision = index.revision,
+                        createdAtMillis = index.createdAtMillis,
+                        updatedAtMillis = index.updatedAtMillis,
+                    )
+                }.sortedByDescending { it.updatedAtMillis }
+        }
+
+    /**
+     * Caches a regenerable page thumbnail at `<documentId>/thumbnails/page-<pageId>.webp`.
+     * Thumbnails deliberately live OUTSIDE `assets/` so manifest integrity ignores them.
+     */
+    fun putThumbnail(
+        documentId: DocumentId,
+        pageId: PageId,
+        webpBytes: ByteArray,
+    ) {
+        store.put(thumbnailPath(documentId, pageId), webpBytes)
+    }
+
+    /** Returns the cached thumbnail bytes for a page, or null when none was written yet. */
+    fun openThumbnail(
+        documentId: DocumentId,
+        pageId: PageId,
+    ): ByteArray? = store.open(thumbnailPath(documentId, pageId))
+
+    /**
+     * Removes every file under `<documentId>/` (depth-first). Leftover empty directories on
+     * disk are harmless — [ContentStore.list] treats dirs transparently. Serialized on the
+     * same [ioLock] as save/load so it can never race a concurrent save of the same doc.
+     */
+    fun deleteDocument(documentId: DocumentId) {
+        synchronized(ioLock) { deleteDocumentLocked(documentId) }
+    }
+
+    private fun deleteDocumentLocked(documentId: DocumentId) {
+        val root = "${documentId.value}"
+        val pending = ArrayDeque(listOf(root))
+        while (pending.isNotEmpty()) {
+            val dir = pending.removeFirst()
+            for (entry in store.list(dir)) {
+                // ContentStore.list returns directory names WITHOUT a trailing slash; a
+                // child with descendants is a directory, otherwise it is a file to delete.
+                if (store.list(entry).isNotEmpty()) {
+                    pending.addLast(entry)
+                } else if (store.exists(entry)) {
+                    store.delete(entry)
+                }
+            }
+        }
     }
 
     /**
@@ -343,7 +439,13 @@ class PenlyStore(
         pageId: PageId,
     ): String = "${documentId.value}/pages/page-${pageId.value}.bin"
 
+    private fun thumbnailPath(
+        documentId: DocumentId,
+        pageId: PageId,
+    ): String = "${documentId.value}/thumbnails/page-${pageId.value}.webp"
+
     private companion object {
+        const val TAG: String = "PenlyStore"
         const val FORMAT_NAME: String = "penly"
     }
 }
