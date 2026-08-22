@@ -66,31 +66,39 @@ fun inkCanvas(
             drawIntoCanvas { canvas ->
                 val nativeCanvas = canvas.nativeCanvas
                 try {
-                    for (record in state.strokes) {
-                        val strokeMatrix =
-                            if (record.transform == Transform.IDENTITY) {
-                                matrix
-                            } else {
-                                transformToMatrix(
-                                    record.transform.throughViewport(
-                                        state.viewport.scale,
-                                        state.viewport.offsetX,
-                                        state.viewport.offsetY,
-                                    ),
-                                )
-                            }
-                        renderer.draw(
-                            nativeCanvas,
-                            record.stroke,
-                            strokeMatrix,
-                        )
-                    }
-                    state.inProgressStroke?.let { stroke ->
-                        renderer.draw(nativeCanvas, stroke, matrix)
-                    }
+                    // All page content lives in page space; one concat maps it to screen
+                    // pixels. CanvasStrokeRenderer.draw applies its matrix argument modulo
+                    // translation only (androidx Ink contract), so strokes must be drawn
+                    // with the translation already carried by the canvas matrix — otherwise
+                    // ink ignores pan and zoom focus while objects (drawn under the same
+                    // concat) follow the viewport, and hit-testing no longer matches pixels.
                     nativeCanvas.save()
                     nativeCanvas.concat(matrix)
                     try {
+                        for (record in state.strokes) {
+                            if (record.transform == Transform.IDENTITY) {
+                                renderer.draw(nativeCanvas, record.stroke, matrix)
+                            } else {
+                                val combined =
+                                    transformToMatrix(
+                                        record.transform.throughViewport(
+                                            state.viewport.scale,
+                                            state.viewport.offsetX,
+                                            state.viewport.offsetY,
+                                        ),
+                                    )
+                                nativeCanvas.save()
+                                nativeCanvas.concat(combined)
+                                try {
+                                    renderer.draw(nativeCanvas, record.stroke, combined)
+                                } finally {
+                                    nativeCanvas.restore()
+                                }
+                            }
+                        }
+                        state.inProgressStroke?.let { stroke ->
+                            renderer.draw(nativeCanvas, stroke, matrix)
+                        }
                         for (obj in state.objects) {
                             drawObject(nativeCanvas, state, obj)
                         }
