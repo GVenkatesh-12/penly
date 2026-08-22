@@ -79,6 +79,11 @@ fun inkCanvas(
                             if (record.transform == Transform.IDENTITY) {
                                 renderer.draw(nativeCanvas, record.stroke, matrix)
                             } else {
+                                // Object transform composes on top of the viewport already
+                                // concat'd above: the canvas gets viewport o object, while the
+                                // renderer argument carries the full linear part
+                                // (viewport scale x object scale) for rendering quality.
+                                val objectMatrix = transformToMatrix(record.transform)
                                 val combined =
                                     transformToMatrix(
                                         record.transform.throughViewport(
@@ -88,7 +93,7 @@ fun inkCanvas(
                                         ),
                                     )
                                 nativeCanvas.save()
-                                nativeCanvas.concat(combined)
+                                nativeCanvas.concat(objectMatrix)
                                 try {
                                     renderer.draw(nativeCanvas, record.stroke, combined)
                                 } finally {
