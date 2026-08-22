@@ -172,13 +172,23 @@ class InkCanvasTransformTest {
         val maxY = (y + radius).toInt().coerceAtMost(height - 1)
         for (py in minY..maxY) {
             for (px in minX..maxX) {
-                if (Color.alpha(getPixel(px, py)) >= INK_ALPHA_THRESHOLD) return true
+                if (isInk(getPixel(px, py))) return true
             }
         }
         return false
     }
 
+    /**
+     * The composited canvas is opaque white, so every screen pixel has alpha 0xFF and an
+     * alpha check would match everything. Ink (dark navy) is detected as any pixel meaningfully
+     * darker than the white background on any channel; antialiased edge blends qualify too.
+     */
+    private fun isInk(pixel: Int): Boolean =
+        Color.red(pixel) < BACKGROUND_CHANNEL_MAX ||
+            Color.green(pixel) < BACKGROUND_CHANNEL_MAX ||
+            Color.blue(pixel) < BACKGROUND_CHANNEL_MAX
+
     private companion object {
-        const val INK_ALPHA_THRESHOLD: Int = 0x80
+        const val BACKGROUND_CHANNEL_MAX: Int = 0xE6
     }
 }

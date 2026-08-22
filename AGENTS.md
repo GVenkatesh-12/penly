@@ -118,6 +118,11 @@ AndroidX Ink 1.0.0 API constraints (learned the hard way):
 - Public stock brushes: `pressurePen()`, `marker()`, `highlighter()`,
   `dashedLine()`.
 - Compose PointerType has no `Pen` since 1.7 — use `Stylus`/`Eraser`.
+- `CanvasStrokeRenderer.draw(canvas, stroke, matrix)` applies its matrix
+  argument modulo TRANSLATION only — the canvas itself must carry pan/zoom
+  (`nativeCanvas.concat(matrix)` around the draw) or ink ignores the
+  viewport while images/text (drawn under the same transform) follow it,
+  and hit-testing stops matching visible pixels. See `InkCanvas.kt`.
 
 Deferred version bumps (closed dependabot PRs, re-proposed on next weekly
 run): kotlin 2.2.10 → 2.4.10 (needs review vs AGP 9.3.0 embedded KGP) and
@@ -148,6 +153,12 @@ Phase 4 implemented so far, `./gradlew check` green locally:
   `PersistenceLifecycleUiTest` (process-death reopen on `MainActivity`),
   `RecoveryBannerUiTest` (journal-residue UX); `PenlyStoreWorkflowTest` is
   JVM and runs in `./gradlew check`.
+- `PenlyStore.save`/`load` are serialized by an internal `ioLock`: the
+  editor serializes its own saves, but loads (page open, test polling) run
+  on other threads and used to crash checksumming a journal copy a
+  concurrent save had just deleted. `replayJournal` also treats a vanished
+  journal copy as an invalid journal. Regression:
+  `PenlyStoreConcurrencyTest`.
 
 ktlint quirks (learned the hard way): dot-chains containing a mid-chain call
 must wrap every link — `json` alone on its line, `.encodeToString(...)` on the

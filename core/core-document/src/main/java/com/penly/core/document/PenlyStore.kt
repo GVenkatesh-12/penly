@@ -9,6 +9,7 @@ import com.penly.core.storage.ContentStore
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.FileNotFoundException
 
 /**
  * Persists [Document]s in a [ContentStore] using the Penly format.
@@ -43,8 +44,21 @@ class PenlyStore(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /**
+     * Serializes the journal commit protocol within this process. [save] and [load] both
+     * mutate/read the same file set (journal staging, replay cleanup), so overlapping calls
+     * can observe a half-finished protocol — e.g. load checksumming a journal copy that a
+     * concurrent save has just deleted (FileNotFoundException from the store). The editor
+     * serializes its own saves, but loads (page open, test polling) run on other threads.
+     */
+    private val ioLock = Any()
+
     /** Writes [document] (all pages, index, then manifest) through the journal. */
     fun save(document: Document) {
+        synchronized(ioLock) { saveLocked(document) }
+    }
+
+    private fun saveLocked(document: Document) {
         val documentId = document.documentId
         val now = clock()
         val pageFiles =
@@ -115,10 +129,13 @@ class PenlyStore(
      * journal is replayed first and the result reports [LoadResult.Success.recovered].
      */
     fun load(documentId: DocumentId): LoadResult {
-        fun failure(message: String): LoadResult.Failure = LoadResult.Failure("document $documentId: $message")
+        synchronized(ioLock) { return loadLocked(documentId) }
+    }
 
-        val recovered = replayJournal(documentId)
+    private fun loadLocked(documentId: DocumentId): LoadResult {
+        fun failure(message: String): LoadResult.Failure = LoadResult.Failure("document $documentId: $message")
         val warnings = ArrayList<String>()
+        val recovered = replayJournal(documentId)
 
         val manifestBytes = store.open(manifestPath(documentId))
         if (manifestBytes == null) {
@@ -252,8 +269,15 @@ class PenlyStore(
             return false
         }
         for ((path, expected) in commit.files) {
-            if (!store.exists(journalPath(documentId, path))) return false
-            if (store.checksum(journalPath(documentId, path)) != expected) return false
+            val actual =
+                try {
+                    store.checksum(journalPath(documentId, path))
+                } catch (e: FileNotFoundException) {
+                    // A listed copy vanished mid-validation (e.g. cleaned up concurrently):
+                    // discard the journal like any other invalid one and keep main state.
+                    return false
+                }
+            if (actual != expected) return false
         }
         for (path in commit.files.keys) {
             val bytes = store.open(journalPath(documentId, path)) ?: return false
