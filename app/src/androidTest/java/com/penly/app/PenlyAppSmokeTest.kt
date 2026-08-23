@@ -1,10 +1,12 @@
 package com.penly.app
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.penly.app.ui.penlyApp
+import com.penly.editor.canvas.INK_CANVAS_TAG
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -19,7 +21,7 @@ class PenlyAppSmokeTest {
         composeRule.setContent {
             penlyApp()
         }
-        composeRule.onNodeWithText("Page 1").assertExists()
+        composeRule.onNodeWithTag(INK_CANVAS_TAG).assertExists()
     }
 
     @Test

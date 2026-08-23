@@ -28,6 +28,7 @@ import com.penly.core.geometry.Transform
 import com.penly.core.model.ImageObject
 import com.penly.core.model.PageObject
 import com.penly.core.model.TextObject
+import com.penly.core.renderer.PageTemplates
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
@@ -75,6 +76,16 @@ fun inkCanvas(
                     nativeCanvas.save()
                     nativeCanvas.concat(matrix)
                     try {
+                        val visiblePageRect =
+                            RectF(
+                                state.viewport.screenToPageX(0f),
+                                state.viewport.screenToPageY(0f),
+                                state.viewport.screenToPageX(size.width),
+                                state.viewport.screenToPageY(size.height),
+                            )
+                        // Background shares the single page→screen transform with ink and
+                        // objects so pan/zoom moves lines identically to strokes.
+                        PageTemplates.drawBackground(nativeCanvas, state.pageTemplate, visiblePageRect)
                         for (record in state.strokes) {
                             if (record.transform == Transform.IDENTITY) {
                                 renderer.draw(nativeCanvas, record.stroke, matrix)

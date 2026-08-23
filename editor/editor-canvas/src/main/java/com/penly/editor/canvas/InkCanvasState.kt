@@ -25,6 +25,7 @@ import com.penly.core.ink.StrokeRecord
 import com.penly.core.model.ImageObject
 import com.penly.core.model.ObjectId
 import com.penly.core.model.PageObject
+import com.penly.core.model.PageTemplate
 import com.penly.core.model.TextObject
 import com.penly.editor.history.UndoRedoStack
 import com.penly.editor.selection.LassoPath
@@ -53,6 +54,10 @@ class InkCanvasState {
         private set
 
     var tool by mutableStateOf(PenTool.PEN)
+        private set
+
+    /** Background template of the current page; painted under the viewport transform. */
+    var pageTemplate by mutableStateOf(PageTemplate.BLANK)
         private set
 
     val strokes = mutableStateListOf<StrokeRecord>()
@@ -114,6 +119,15 @@ class InkCanvasState {
 
     fun selectTool(tool: PenTool) {
         this.tool = tool
+    }
+
+    /** Sets the page background template and repaints. The [JvmName] avoids the JVM
+     signature clash with the delegated property's generated private setter. */
+    @JvmName("applyPageTemplate")
+    fun setPageTemplate(template: PageTemplate) {
+        if (pageTemplate == template) return
+        pageTemplate = template
+        bumpTick()
     }
 
     /** Enables/disables selection mode; disabling clears the current selection and lasso. */

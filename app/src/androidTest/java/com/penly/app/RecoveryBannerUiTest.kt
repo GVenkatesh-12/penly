@@ -13,7 +13,7 @@ import com.penly.core.model.DocumentId
 import com.penly.core.model.Page
 import com.penly.core.model.PageId
 import com.penly.core.storage.FileContentStore
-import com.penly.feature.editor.editorScreen
+import com.penly.feature.editor.editorDocumentScreen
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -45,17 +45,27 @@ class RecoveryBannerUiTest {
         fabricateJournal(document)
 
         composeRule.setContent {
-            editorScreen(store = store)
+            editorDocumentScreen(
+                store = store,
+                documentId = document.documentId,
+                initialPageId = null,
+                onNavigateBack = {},
+            )
         }
         composeRule.waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { bannerVisible() }
     }
 
     @Test
     fun cleanStore_opensWithoutRecoveryBanner() {
-        saveDocument()
+        val document = saveDocument()
 
         composeRule.setContent {
-            editorScreen(store = store)
+            editorDocumentScreen(
+                store = store,
+                documentId = document.documentId,
+                initialPageId = null,
+                onNavigateBack = {},
+            )
         }
         composeRule.waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { loadFinished() }
         assertBannerAbsent()
@@ -64,10 +74,18 @@ class RecoveryBannerUiTest {
     @Test
     fun corruptJournalResidue_isIgnoredWithoutBanner() {
         val document = saveDocument()
-        contentStore.put("${document.documentId.value}/journal/commit.json", "not-a-journal".toByteArray())
+        contentStore.put(
+            "${document.documentId.value}/journal/commit.json",
+            "not-a-journal".toByteArray(),
+        )
 
         composeRule.setContent {
-            editorScreen(store = store)
+            editorDocumentScreen(
+                store = store,
+                documentId = document.documentId,
+                initialPageId = null,
+                onNavigateBack = {},
+            )
         }
         composeRule.waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { loadFinished() }
         assertBannerAbsent()

@@ -21,6 +21,7 @@ dependencies {
     implementation(project(":core:core-model"))
     implementation(project(":core:core-geometry"))
     implementation(project(":core:core-common"))
+    implementation(project(":core:core-renderer"))
     implementation(project(":editor:editor-history"))
     implementation(project(":editor:editor-selection"))
 

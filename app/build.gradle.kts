@@ -42,6 +42,8 @@ android {
 dependencies {
     implementation(project(":feature:feature-editor"))
     implementation(project(":core:core-document"))
+    implementation(project(":core:core-common"))
+    implementation(project(":core:core-model"))
     implementation(project(":core:core-storage"))
 
     implementation(platform(libs.androidx.compose.bom))

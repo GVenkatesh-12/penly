@@ -23,11 +23,13 @@ dependencies {
     implementation(project(":core:core-model"))
     implementation(project(":core:core-geometry"))
     implementation(project(":core:core-ink"))
+    implementation(project(":core:core-renderer"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.activity.compose)
 
     testImplementation(libs.junit)
