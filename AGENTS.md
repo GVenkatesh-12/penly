@@ -165,5 +165,24 @@ must wrap every link — `json` alone on its line, `.encodeToString(...)` on the
 next, and `).toByteArray(...)` glued to the closing paren; a trailing `.` link
 after a call needs the chain hoisted into a local instead.
 
-Next: push Phase 4, verify CI; remaining Phase 4 exit criteria per plan §55.
-Any failing task — fix, don't silence.
+## Current state (Phase 5 Library/UI — in progress)
+
+Milestones A–E are committed on `main`: document summaries/thumbnails/deletion, renderer
+templates, multi-page editor persistence, settings storage/appearance, and the adaptive library.
+
+Milestones F–G are committed on `main`: `feature-notebook` provides a lazy adaptive page
+browser with thumbnail placeholders, notebook/page rename, template-aware page creation, and
+a one-page deletion guard (every mutation is a full-document copy saved through `PenlyStore`'s
+journal-safe protocol); `penlyApp` hosts library ⇄ notebook ⇄ editor and settings destinations
+with Navigation Compose and applies the persisted `ThemeMode`; the editor and process-lifecycle
+tests enter through the library flow and `LibraryWorkflowUiTest` covers notebook creation, a
+Grid page, and opening it.
+
+`./gradlew check` was fixed and is green locally. Two build issues were resolved during the
+verification run:
+- `feature-notebook` was missing the Compose compiler plugin (`alias(libs.plugins.kotlin.compose)`)
+  and `buildFeatures { compose = true }`. Without it, `@Composable` functions were not IR-transformed
+  (no `$composer` param) and the Kotlin inliner hit `Couldn't inline method call: remember` in
+  `NotebookScreen`.
+- `navigation-compose` was bumped 2.10.0 → 2.9.8: 2.10.0 (and transitively lifecycle 2.11.0)
+  requires compileSdk 37 while this repo targets 36. Keep navigation at 2.9.x while on compileSdk 36.

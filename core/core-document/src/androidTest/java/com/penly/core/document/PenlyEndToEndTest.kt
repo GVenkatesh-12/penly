@@ -62,7 +62,15 @@ class PenlyEndToEndTest {
                 createdAtMillis = now,
                 updatedAtMillis = now,
             )
-        val original = Document(documentId, "End to End", listOf(page), 1, now, now)
+        val original =
+            Document(
+                documentId = documentId,
+                title = "End to End",
+                pages = listOf(page),
+                revision = 1,
+                createdAtMillis = now,
+                updatedAtMillis = now,
+            )
 
         val store = InMemoryContentStore()
         val penlyStore = PenlyStore(store)

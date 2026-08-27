@@ -1,12 +1,11 @@
 package com.penly.app
 
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.penly.app.ui.penlyApp
-import com.penly.editor.canvas.INK_CANVAS_TAG
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,34 +16,33 @@ class PenlyAppSmokeTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun appShowsEditor() {
+    fun appShowsLibrary() {
         composeRule.setContent {
             penlyApp()
         }
-        composeRule.onNodeWithTag(INK_CANVAS_TAG).assertExists()
+        composeRule.onNodeWithText("Penly").assertExists()
+        composeRule.onNodeWithText("New notebook").assertExists()
     }
 
     @Test
-    fun appShowsEditorControls() {
+    fun appShowsLibraryControls() {
         composeRule.setContent {
             penlyApp()
         }
-        composeRule.onNodeWithText("Undo").assertExists()
-        composeRule.onNodeWithText("Redo").assertExists()
-        composeRule.onNodeWithText("Clear").assertExists()
-        composeRule.onNodeWithText("Text").assertExists()
-        composeRule.onNodeWithText("Select").assertExists()
-        composeRule.onNodeWithText("Pen").assertExists()
+        composeRule.onNodeWithText("All").assertExists()
+        composeRule.onNodeWithText("Recent").assertExists()
+        composeRule.onNodeWithText("Favorites").assertExists()
+        composeRule.onNodeWithText("Trash").assertExists()
     }
 
     @Test
-    fun textDialog_opensAndDismisses() {
+    fun settingsOpensAndCloses() {
         composeRule.setContent {
             penlyApp()
         }
-        composeRule.onNodeWithText("Text").performClick()
-        composeRule.onNodeWithText("Add text").assertExists()
-        composeRule.onNodeWithText("Cancel").performClick()
-        composeRule.onNodeWithText("Add text").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Settings").performClick()
+        composeRule.onNodeWithText("Appearance").assertExists()
+        composeRule.onNodeWithContentDescription("Back").performClick()
+        composeRule.onNodeWithText("Penly").assertExists()
     }
 }

@@ -56,6 +56,28 @@ class EditorWorkflowUiTest {
                 penlyApp(store = store)
             }
         }
+        openEditorThroughLibrary()
+    }
+
+    /** Exercises the same library → notebook → page path a person uses before editor tests. */
+    private fun openEditorThroughLibrary() {
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithText("New notebook").fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Untitled").fetchSemanticsNodes().isNotEmpty()
+        }
+        if (store.listDocuments().isEmpty()) {
+            composeRule.onNodeWithText("New notebook").performClick()
+            composeRule.onNodeWithText("Create").performClick()
+        } else {
+            composeRule.onNodeWithText("Untitled").performClick()
+        }
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithText("Page 1").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Page 1").performClick()
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithText("Undo").fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     private fun drawSwipe(
@@ -117,6 +139,7 @@ class EditorWorkflowUiTest {
 
         // "Reload" the app against the same store: the stroke must come back.
         generation++
+        openEditorThroughLibrary()
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) { isUndoDisabled() }
         assertEquals(1, savedInkCount())
     }

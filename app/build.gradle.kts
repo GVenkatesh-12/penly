@@ -40,11 +40,15 @@ android {
 }
 
 dependencies {
+    implementation(project(":feature:feature-home"))
+    implementation(project(":feature:feature-notebook"))
     implementation(project(":feature:feature-editor"))
+    implementation(project(":feature:feature-settings"))
     implementation(project(":core:core-document"))
     implementation(project(":core:core-common"))
     implementation(project(":core:core-model"))
     implementation(project(":core:core-storage"))
+    implementation(project(":core:core-settings"))
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.ui)
@@ -54,6 +58,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.navigation.compose)
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 

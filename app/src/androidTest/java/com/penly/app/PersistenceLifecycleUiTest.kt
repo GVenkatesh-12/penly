@@ -3,9 +3,11 @@ package com.penly.app
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -40,6 +42,7 @@ class PersistenceLifecycleUiTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         penlyDir = File(context.filesDir, "penly")
         penlyDir.deleteRecursively()
+        composeRule.activityRule.scenario.recreate()
     }
 
     @After
@@ -49,12 +52,14 @@ class PersistenceLifecycleUiTest {
 
     @Test
     fun drawThenRecreate_contentSurvivesProcessDeath() {
+        openFirstPageThroughLibrary()
         composeRule.onNodeWithTag(INK_CANVAS_TAG).performTouchInput {
             swipe(Offset(100f, 300f), Offset(300f, 300f), durationMillis = 80L)
         }
         waitForSavedInk(1)
 
         composeRule.activityRule.scenario.recreate()
+        reopenEditorIfNeeded()
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
             isUndoDisabled()
         }
@@ -86,6 +91,34 @@ class PersistenceLifecycleUiTest {
         composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
             savedInkCount() == expected
         }
+    }
+
+    private fun openFirstPageThroughLibrary() {
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithText("New notebook").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("New notebook").performClick()
+        composeRule.onNodeWithText("Create").performClick()
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithText("Page 1").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Page 1").performClick()
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithTag(INK_CANVAS_TAG).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun reopenEditorIfNeeded() {
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithTag(INK_CANVAS_TAG).fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Untitled").fetchSemanticsNodes().isNotEmpty()
+        }
+        if (composeRule.onAllNodesWithTag(INK_CANVAS_TAG).fetchSemanticsNodes().isNotEmpty()) return
+        composeRule.onNodeWithText("Untitled").performClick()
+        composeRule.waitUntil(timeoutMillis = SAVE_TIMEOUT_MILLIS) {
+            composeRule.onAllNodesWithText("Page 1").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("Page 1").performClick()
     }
 
     private fun isUndoDisabled(): Boolean {
